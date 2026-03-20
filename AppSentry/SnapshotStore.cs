@@ -1,11 +1,11 @@
-using AppTracker.Models;
+using AppSentry.Models;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace AppTracker;
+namespace AppSentry;
 
 /// <summary>
-/// Persists the registry snapshot and change history to %APPDATA%\AppTracker\.
+/// Persists the registry snapshot and change history to %APPDATA%\AppSentry\.
 /// Uses System.Text.Json (no external dependencies).
 /// </summary>
 public class SnapshotStore
@@ -24,7 +24,7 @@ public class SnapshotStore
     {
         _dataDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "AppTracker");
+            "AppSentry");
         Directory.CreateDirectory(_dataDir);
         _snapshotPath = Path.Combine(_dataDir, "snapshot.json");
         _historyPath = Path.Combine(_dataDir, "history.json");

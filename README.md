@@ -1,4 +1,4 @@
-# AppTracker
+# AppSentry
 
 An open-source Windows 11 application that monitors software installs, updates, and removals in real-time — similar to the install-tracking feature in IObit Uninstaller, but free and open source.
 
@@ -53,7 +53,7 @@ An open-source Windows 11 application that monitors software installs, updates, 
 
 ## How It Works
 
-AppTracker monitors multiple data sources to detect software changes:
+AppSentry monitors multiple data sources to detect software changes:
 
 1. **Registry Scanning** — Reads installed app entries from `HKLM\...\Uninstall`, `HKCU\...\Uninstall`, and `HKU\{SID}\...\Uninstall` (other users, requires admin)
 2. **Microsoft Store** — Runs `Get-AppxPackage` via PowerShell to detect Store/sideloaded apps
@@ -72,14 +72,14 @@ On each scan, the current state is compared against the previous snapshot. Any d
 ## Build from Source
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/AppTracker.git
-cd AppTracker
+git clone https://github.com/vonkdj98/AppSentry.git
+cd AppSentry
 
 # Run in development
-dotnet run --project AppTracker/AppTracker.csproj
+dotnet run --project AppSentry/AppSentry.csproj
 
 # Build a single self-contained exe (no .NET runtime required)
-dotnet publish AppTracker/AppTracker.csproj ^
+dotnet publish AppSentry/AppSentry.csproj ^
   -c Release ^
   -r win-x64 ^
   --self-contained true ^
@@ -89,12 +89,12 @@ dotnet publish AppTracker/AppTracker.csproj ^
 
 The output exe will be in:
 ```
-AppTracker\bin\Release\net9.0-windows\win-x64\publish\AppTracker.exe
+AppSentry\bin\Release\net9.0-windows\win-x64\publish\AppSentry.exe
 ```
 
 ## Data Storage
 
-All data is stored locally in `%APPDATA%\AppTracker\`:
+All data is stored locally in `%APPDATA%\AppSentry\`:
 
 | File | Purpose |
 |------|---------|
@@ -108,7 +108,7 @@ All data is stored locally in `%APPDATA%\AppTracker\`:
 ## Project Structure
 
 ```
-AppTracker/
+AppSentry/
   Program.cs                  # Entry point, single-instance mutex
   MainForm.cs                 # Main window, toolbar, ListView, all UI logic
   Models/

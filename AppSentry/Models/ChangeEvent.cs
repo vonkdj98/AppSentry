@@ -1,4 +1,4 @@
-namespace AppTracker.Models;
+namespace AppSentry.Models;
 
 public enum ChangeType
 {

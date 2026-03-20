@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace AppTracker;
+namespace AppSentry;
 
 /// <summary>
 /// Detects which package manager (Winget, Chocolatey, Scoop) installed a given app.

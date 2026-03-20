@@ -1,7 +1,7 @@
 using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 
-namespace AppTracker;
+namespace AppSentry;
 
 /// <summary>
 /// Generates the App Tracker icon programmatically using GDI+.

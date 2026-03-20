@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using System.Security.Principal;
-using AppTracker.Models;
+using AppSentry.Models;
 using Microsoft.Win32;
 
-namespace AppTracker;
+namespace AppSentry;
 
 /// <summary>
 /// Reads all installed applications from:

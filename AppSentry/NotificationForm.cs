@@ -1,6 +1,6 @@
-using AppTracker.Models;
+using AppSentry.Models;
 
-namespace AppTracker;
+namespace AppSentry;
 
 /// <summary>
 /// A popup notification that appears in the bottom-right corner of the screen.

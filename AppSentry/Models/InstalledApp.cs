@@ -1,4 +1,4 @@
-namespace AppTracker.Models;
+namespace AppSentry.Models;
 
 /// <summary>
 /// Represents a single installed application read from the Windows Registry.
