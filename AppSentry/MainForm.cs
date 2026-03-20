@@ -1,9 +1,9 @@
 using System.Media;
 using System.Runtime.InteropServices;
-using AppTracker.Models;
+using AppSentry.Models;
 using Microsoft.Win32;
 
-namespace AppTracker;
+namespace AppSentry;
 
 public partial class MainForm : Form
 {
@@ -70,7 +70,7 @@ public partial class MainForm : Form
     // ── Theme Detection ──────────────────────────────────────────────────────
 
     private static readonly string AppDataDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AppTracker");
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AppSentry");
     private static readonly string ThemePrefPath = Path.Combine(AppDataDir, "theme.txt");
     private static readonly string SoundPrefPath = Path.Combine(AppDataDir, "sound.txt");
     private static readonly string ColumnLayoutPath = Path.Combine(AppDataDir, "columns.txt");
@@ -1381,7 +1381,7 @@ public partial class MainForm : Form
     // ── Run at Startup ───────────────────────────────────────────────────────
 
     private const string StartupRegKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
-    private const string StartupValueName = "AppTracker";
+    private const string StartupValueName = "AppSentry";
 
     private static bool IsStartupEnabled()
     {
@@ -1403,12 +1403,12 @@ public partial class MainForm : Form
             if (_chkStartup.Checked)
             {
                 key.SetValue(StartupValueName, $"\"{Application.ExecutablePath}\"");
-                SetStatus("✓ AppTracker will start with Windows.");
+                SetStatus("✓ AppSentry will start with Windows.");
             }
             else
             {
                 key.DeleteValue(StartupValueName, throwOnMissingValue: false);
-                SetStatus("✓ AppTracker will no longer start with Windows.");
+                SetStatus("✓ AppSentry will no longer start with Windows.");
             }
         }
         catch (Exception ex)
@@ -1439,7 +1439,7 @@ public partial class MainForm : Form
         {
             Title = "Export Change History",
             Filter = "CSV files (*.csv)|*.csv",
-            FileName = $"AppTracker_Export_{DateTime.Now:yyyyMMdd_HHmmss}.csv"
+            FileName = $"AppSentry_Export_{DateTime.Now:yyyyMMdd_HHmmss}.csv"
         };
         if (dlg.ShowDialog() != DialogResult.OK) return;
 

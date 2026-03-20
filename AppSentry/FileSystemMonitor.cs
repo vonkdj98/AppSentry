@@ -1,4 +1,4 @@
-namespace AppTracker;
+namespace AppSentry;
 
 /// <summary>
 /// Watches C:\Program Files and C:\Program Files (x86) for new folder creation.

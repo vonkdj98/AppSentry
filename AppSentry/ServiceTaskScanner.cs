@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.ServiceProcess;
 
-namespace AppTracker;
+namespace AppSentry;
 
 /// <summary>
 /// Scans for newly registered Windows Services and Scheduled Tasks.

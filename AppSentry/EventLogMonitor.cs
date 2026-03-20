@@ -1,7 +1,7 @@
 using System.Diagnostics;
-using AppTracker.Models;
+using AppSentry.Models;
 
-namespace AppTracker;
+namespace AppSentry;
 
 /// <summary>
 /// Monitors Windows Event Log for software install/uninstall events.

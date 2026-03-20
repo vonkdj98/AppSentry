@@ -1,7 +1,7 @@
-using AppTracker.Models;
+using AppSentry.Models;
 using Microsoft.Win32;
 
-namespace AppTracker;
+namespace AppSentry;
 
 /// <summary>
 /// Shows a side-by-side diff of registry values between the old and new version of an updated app.

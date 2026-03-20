@@ -1,6 +1,6 @@
-using AppTracker.Models;
+using AppSentry.Models;
 
-namespace AppTracker;
+namespace AppSentry;
 
 /// <summary>
 /// Compares two registry snapshots and returns a list of detected changes.

@@ -6,8 +6,8 @@
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>AppTracker</AssemblyName>
-    <RootNamespace>AppTracker</RootNamespace>
+    <AssemblyName>AppSentry</AssemblyName>
+    <RootNamespace>AppSentry</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

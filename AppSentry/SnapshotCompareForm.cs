@@ -1,6 +1,6 @@
-using AppTracker.Models;
+using AppSentry.Models;
 
-namespace AppTracker;
+namespace AppSentry;
 
 /// <summary>
 /// Lets the user pick a date range and see all changes between those two dates.
@@ -335,7 +335,7 @@ internal class SnapshotCompareForm : Form
         {
             Title = "Export Comparison",
             Filter = "CSV files (*.csv)|*.csv",
-            FileName = $"AppTracker_Compare_{_dtpFrom.Value:yyyyMMdd}_{_dtpTo.Value:yyyyMMdd}.csv"
+            FileName = $"AppSentry_Compare_{_dtpFrom.Value:yyyyMMdd}_{_dtpTo.Value:yyyyMMdd}.csv"
         };
         if (dlg.ShowDialog() != DialogResult.OK) return;
 

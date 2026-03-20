@@ -1,8 +1,8 @@
-namespace AppTracker;
+namespace AppSentry;
 
 internal static class Program
 {
-    private static readonly string MutexName = "AppTracker_SingleInstance_Mutex";
+    private static readonly string MutexName = "AppSentry_SingleInstance_Mutex";
 
     [STAThread]
     static void Main()
@@ -12,8 +12,8 @@ internal static class Program
         if (!createdNew)
         {
             MessageBox.Show(
-                "AppTracker is already running.",
-                "AppTracker",
+                "AppSentry is already running.",
+                "AppSentry",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;
