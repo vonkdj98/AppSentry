@@ -597,20 +597,22 @@ internal class InstalledAppsForm : Form
                 Anchor = AnchorStyles.Left | AnchorStyles.Top
             };
 
-            var lblValue = new Label
+            var txtValue = new TextBox
             {
                 Text = value,
-                AutoSize = true,
+                ReadOnly = true,
+                BorderStyle = BorderStyle.None,
+                BackColor = _theme.FormBg,
                 ForeColor = _theme.FormFg,
                 Font = new Font("Segoe UI", 9f),
-                Padding = new Padding(0, 4, 0, 4),
-                Anchor = AnchorStyles.Left | AnchorStyles.Top,
-                MaximumSize = new Size(400, 0)
+                Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
+                Width = 400,
+                Margin = new Padding(0, 4, 0, 4)
             };
 
             panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             panel.Controls.Add(lblName, 0, row);
-            panel.Controls.Add(lblValue, 1, row);
+            panel.Controls.Add(txtValue, 1, row);
             panel.RowCount = ++row;
         }
 
