@@ -287,7 +287,7 @@ public partial class MainForm : Form
 
     private void InitializeComponent()
     {
-        Text = "App Tracker — Install & Update Monitor";
+        Text = "AppSentry — Install & Update Monitor";
         Size = new Size(1400, 700);
         MinimumSize = new Size(950, 450);
         StartPosition = FormStartPosition.CenterScreen;
@@ -852,14 +852,14 @@ public partial class MainForm : Form
             _trayMenu.ForeColor = _theme.FormFg;
             _trayMenu.Renderer = new DarkToolStripRenderer();
         }
-        _trayMenu.Items.Add("Show App Tracker", null, (_, _) => RestoreFromTray());
+        _trayMenu.Items.Add("Show AppSentry", null, (_, _) => RestoreFromTray());
         _trayMenu.Items.Add("Scan Now", null, (_, _) => { RestoreFromTray(); PerformScan(false); });
         _trayMenu.Items.Add("-");
         _trayMenu.Items.Add("Exit", null, (_, _) => { _trayIcon.Visible = false; Application.Exit(); });
 
         _trayIcon = new NotifyIcon
         {
-            Text = "App Tracker — Monitoring",
+            Text = "AppSentry — Monitoring",
             Icon = AppIcon.CreateSmall(),
             ContextMenuStrip = _trayMenu,
             Visible = false
@@ -874,7 +874,7 @@ public partial class MainForm : Form
         {
             Hide();
             _trayIcon.Visible = true;
-            _trayIcon.ShowBalloonTip(1500, "App Tracker",
+            _trayIcon.ShowBalloonTip(1500, "AppSentry",
                 "Minimized to tray. Still monitoring for changes.", ToolTipIcon.Info);
         }
     }
