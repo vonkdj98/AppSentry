@@ -59,13 +59,14 @@ public partial class MainForm : Form
         DetectTheme();
         LoadSoundPref();
         LoadNotifyHidePref();
+        LoadIntervalPref();
         InitializeComponent();
         SetupTrayIcon();
         BuildListContextMenu();
         _serviceTaskScanner.Initialize();
         LoadHistory();
         PerformScan(isStartup: true);
-        StartTimer(5);
+        StartTimer(_intervalIndex switch { 0 => 1, 1 => 5, 2 => 10, 3 => 30, _ => 0 });
     }
 
     // ── Theme Detection ──────────────────────────────────────────────────────
@@ -76,8 +77,10 @@ public partial class MainForm : Form
     private static readonly string SoundPrefPath = Path.Combine(AppDataDir, "sound.txt");
     private static readonly string ColumnLayoutPath = Path.Combine(AppDataDir, "columns.txt");
     private static readonly string NotifyHidePath = Path.Combine(AppDataDir, "notifyhide.txt");
+    private static readonly string IntervalPrefPath = Path.Combine(AppDataDir, "interval.txt");
     private bool _soundEnabled;
     private int _notifyAutoHideSeconds; // 0 = stay forever
+    private int _intervalIndex = 1; // default: 5 min (index into combo)
 
     [DllImport("winmm.dll")]
     private static extern bool PlaySound(string lpszName, nint hmod, uint fdwSound);
@@ -236,6 +239,22 @@ public partial class MainForm : Form
         catch { }
     }
 
+    private void LoadIntervalPref()
+    {
+        try
+        {
+            if (File.Exists(IntervalPrefPath) && int.TryParse(File.ReadAllText(IntervalPrefPath).Trim(), out var idx))
+                _intervalIndex = Math.Clamp(idx, 0, 4); // 0-4 = "1 min" through "Off"
+        }
+        catch { }
+    }
+
+    private void SaveIntervalPref()
+    {
+        try { File.WriteAllText(IntervalPrefPath, _intervalIndex.ToString()); }
+        catch { }
+    }
+
     // ── Column Layout Persistence ─────────────────────────────────────────────
 
     private void SaveColumnLayout()
@@ -346,7 +365,7 @@ public partial class MainForm : Form
             Font = new Font("Segoe UI", 8.5f)
         };
         _cmbInterval.Items.AddRange(["1 min", "5 min", "10 min", "30 min", "Off"]);
-        _cmbInterval.SelectedIndex = 1;
+        _cmbInterval.SelectedIndex = _intervalIndex;
         _cmbInterval.SelectedIndexChanged += OnIntervalChanged;
 
         _lblSearch = new Label
@@ -1472,7 +1491,9 @@ public partial class MainForm : Form
 
     private void OnIntervalChanged(object? sender, EventArgs e)
     {
-        int minutes = _cmbInterval.SelectedIndex switch { 0 => 1, 1 => 5, 2 => 10, 3 => 30, _ => 0 };
+        _intervalIndex = _cmbInterval.SelectedIndex;
+        SaveIntervalPref();
+        int minutes = _intervalIndex switch { 0 => 1, 1 => 5, 2 => 10, 3 => 30, _ => 0 };
         StartTimer(minutes);
     }
 
