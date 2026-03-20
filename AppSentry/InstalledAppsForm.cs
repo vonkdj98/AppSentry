@@ -8,6 +8,7 @@ internal class InstalledAppsForm : Form
     private readonly ThemeColors _theme;
     private readonly bool _isDarkMode;
     private readonly PackageManagerDetector _pkgDetector;
+    private readonly ExclusionStore _exclusionStore;
     private Dictionary<string, InstalledApp> _apps;
 
     // ── Controls ─────────────────────────────────────────────────────────────
@@ -35,12 +36,13 @@ internal class InstalledAppsForm : Form
     private const int ColPkgManager = 6;
     private const int ColInstallLocation = 7;
 
-    public InstalledAppsForm(Dictionary<string, InstalledApp> apps, ThemeColors theme, bool isDarkMode, PackageManagerDetector pkgDetector)
+    public InstalledAppsForm(Dictionary<string, InstalledApp> apps, ThemeColors theme, bool isDarkMode, PackageManagerDetector pkgDetector, ExclusionStore exclusionStore)
     {
         _apps = apps;
         _theme = theme;
         _isDarkMode = isDarkMode;
         _pkgDetector = pkgDetector;
+        _exclusionStore = exclusionStore;
 
         BuildForm();
         BuildToolbar();
@@ -233,6 +235,9 @@ internal class InstalledAppsForm : Form
         var menuCopyDetails = new ToolStripMenuItem("📋 Copy Details to Clipboard");
         menuCopyDetails.Click += OnContextCopyDetails;
 
+        var menuExclude = new ToolStripMenuItem("🚫 Exclude this app…");
+        menuExclude.Click += OnContextExclude;
+
         _contextMenu.Items.AddRange([
             menuViewDetails,
             new ToolStripSeparator(),
@@ -240,7 +245,9 @@ internal class InstalledAppsForm : Form
             menuOpenLocation,
             new ToolStripSeparator(),
             menuCopyName,
-            menuCopyDetails
+            menuCopyDetails,
+            new ToolStripSeparator(),
+            menuExclude
         ]);
 
         _listView.ContextMenuStrip = _contextMenu;
@@ -500,6 +507,21 @@ internal class InstalledAppsForm : Form
             """;
         Clipboard.SetText(details);
         _statusLabel.Text = $"Copied details for {app.Name} to clipboard.";
+    }
+
+    private void OnContextExclude(object? sender, EventArgs e)
+    {
+        var app = GetSelectedApp();
+        if (app == null) return;
+
+        var existing = _exclusionStore.GetEntry(app.Name);
+        var prefill = existing ?? new ExclusionEntry(app.Name, true, false);
+
+        if (ExclusionsForm.ShowExclusionDialogStatic(prefill, _theme, this, out var result))
+        {
+            _exclusionStore.Add(result);
+            _statusLabel.Text = $"✓ Exclusion saved for \"{result.AppName}\"";
+        }
     }
 
     // ── View Details dialog ────────────────────────────────────────────────────
