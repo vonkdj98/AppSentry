@@ -40,6 +40,7 @@ public partial class MainForm : Form
     private Label _lblTheme = null!;
     private CheckBox _chkSound = null!;
     private Button _btnCompare = null!;
+    private Button _btnInstalledApps = null!;
     private ComboBox _cmbNotifyHide = null!;
     private Label _lblNotifyHide = null!;
     private ContextMenuStrip _listContextMenu = null!;
@@ -154,7 +155,7 @@ public partial class MainForm : Form
             ApplyThemeRecursive(c);
 
         // Buttons
-        foreach (var btn in new[] { _btnScanNow, _btnClearHistory, _btnExportCsv, _btnCompare })
+        foreach (var btn in new[] { _btnScanNow, _btnClearHistory, _btnExportCsv, _btnCompare, _btnInstalledApps })
         {
             btn.BackColor = _theme.ButtonBg;
             btn.ForeColor = _theme.ButtonFg;
@@ -425,6 +426,9 @@ public partial class MainForm : Form
             frm.ShowDialog(this);
         };
 
+        _btnInstalledApps = MakeToolButton("📦 Installed Apps", "Browse all currently installed programs");
+        _btnInstalledApps.Click += OnInstalledAppsClick;
+
         _lblNotifyHide = new Label
         {
             Text = "Auto-hide notifications:",
@@ -469,7 +473,7 @@ public partial class MainForm : Form
             Margin = Padding.Empty
         };
         flow.Controls.AddRange([
-            _btnScanNow, _btnClearHistory, _btnExportCsv, _btnCompare,
+            _btnScanNow, _btnClearHistory, _btnExportCsv, _btnCompare, _btnInstalledApps,
             MakeSpacer(12),
             _lblInterval, _cmbInterval,
             _lblSearch, _txtSearch,
@@ -1470,6 +1474,26 @@ public partial class MainForm : Form
     {
         int minutes = _cmbInterval.SelectedIndex switch { 0 => 1, 1 => 5, 2 => 10, 3 => 30, _ => 0 };
         StartTimer(minutes);
+    }
+
+    private void OnInstalledAppsClick(object? sender, EventArgs e)
+    {
+        _btnInstalledApps.Enabled = false;
+        Cursor = Cursors.WaitCursor;
+        SetStatus("Scanning installed apps…");
+
+        Task.Run(() =>
+        {
+            var apps = RegistryScanner.Scan();
+            Invoke(() =>
+            {
+                Cursor = Cursors.Default;
+                _btnInstalledApps.Enabled = true;
+                SetStatus($"Ready  ·  {apps.Count} apps found on this machine");
+                using var frm = new InstalledAppsForm(apps, _theme, _isDarkMode, _pkgDetector);
+                frm.ShowDialog(this);
+            });
+        });
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
