@@ -1350,33 +1350,35 @@ public partial class MainForm : Form
                 Anchor = AnchorStyles.Left | AnchorStyles.Top
             };
 
-            var lblValue = new Label
+            var txtValue = new TextBox
             {
                 Text = value,
-                AutoSize = true,
+                ReadOnly = true,
+                BorderStyle = BorderStyle.None,
+                BackColor = _theme.FormBg,
                 ForeColor = _theme.FormFg,
                 Font = new Font("Segoe UI", 9f),
-                Padding = new Padding(0, 4, 0, 4),
-                Anchor = AnchorStyles.Left | AnchorStyles.Top,
-                MaximumSize = new Size(400, 0)
+                Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
+                Width = 400,
+                Margin = new Padding(0, 4, 0, 4)
             };
 
             // Color the change type
             if (label == "Change Type")
             {
-                lblValue.ForeColor = ev.ChangeType switch
+                txtValue.ForeColor = ev.ChangeType switch
                 {
                     ChangeType.Installed => _theme.InstalledAccent,
                     ChangeType.Updated => _theme.UpdatedAccent,
                     ChangeType.Removed => _theme.RemovedAccent,
                     _ => _theme.FormFg
                 };
-                lblValue.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+                txtValue.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
             }
 
             panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             panel.Controls.Add(lblName, 0, row);
-            panel.Controls.Add(lblValue, 1, row);
+            panel.Controls.Add(txtValue, 1, row);
             panel.RowCount = ++row;
         }
 
