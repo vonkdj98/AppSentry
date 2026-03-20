@@ -17,6 +17,7 @@ public partial class MainForm : Form
     private readonly FileSystemMonitor _fileSystemMonitor = new();
     private readonly ServiceTaskScanner _serviceTaskScanner = new();
     private readonly PackageManagerDetector _pkgDetector = new();
+    private readonly ExclusionStore _exclusionStore = new();
 
     // ── Theme ────────────────────────────────────────────────────────────────
     private enum ThemeMode { System, Dark, Light }
@@ -41,6 +42,7 @@ public partial class MainForm : Form
     private CheckBox _chkSound = null!;
     private Button _btnCompare = null!;
     private Button _btnInstalledApps = null!;
+    private Button _btnExclusions = null!;
     private ComboBox _cmbNotifyHide = null!;
     private Label _lblNotifyHide = null!;
     private ContextMenuStrip _listContextMenu = null!;
@@ -158,7 +160,7 @@ public partial class MainForm : Form
             ApplyThemeRecursive(c);
 
         // Buttons
-        foreach (var btn in new[] { _btnScanNow, _btnClearHistory, _btnExportCsv, _btnCompare, _btnInstalledApps })
+        foreach (var btn in new[] { _btnScanNow, _btnClearHistory, _btnExportCsv, _btnCompare, _btnInstalledApps, _btnExclusions })
         {
             btn.BackColor = _theme.ButtonBg;
             btn.ForeColor = _theme.ButtonFg;
@@ -448,6 +450,13 @@ public partial class MainForm : Form
         _btnInstalledApps = MakeToolButton("📦 Installed Apps", "Browse all currently installed programs");
         _btnInstalledApps.Click += OnInstalledAppsClick;
 
+        _btnExclusions = MakeToolButton("🚫 Exclusions", "Manage apps excluded from notifications or logging");
+        _btnExclusions.Click += (_, _) =>
+        {
+            using var frm = new ExclusionsForm(_exclusionStore, _theme, _isDarkMode);
+            frm.ShowDialog(this);
+        };
+
         _lblNotifyHide = new Label
         {
             Text = "Auto-hide notifications:",
@@ -492,7 +501,7 @@ public partial class MainForm : Form
             Margin = Padding.Empty
         };
         flow.Controls.AddRange([
-            _btnScanNow, _btnClearHistory, _btnExportCsv, _btnCompare, _btnInstalledApps,
+            _btnScanNow, _btnClearHistory, _btnExportCsv, _btnCompare, _btnInstalledApps, _btnExclusions,
             MakeSpacer(12),
             _lblInterval, _cmbInterval,
             _lblSearch, _txtSearch,
@@ -595,9 +604,13 @@ public partial class MainForm : Form
             diffForm.ShowDialog(this);
         };
 
+        var menuExclude = new ToolStripMenuItem("🚫 Exclude this app…");
+        menuExclude.Click += OnContextExclude;
+
         _listContextMenu.Items.AddRange([menuViewDetails, menuViewDiff, new ToolStripSeparator(),
             menuUninstall, menuOpenLocation, new ToolStripSeparator(),
-            menuCopyName, menuCopyDetails]);
+            menuCopyName, menuCopyDetails,
+            new ToolStripSeparator(), menuExclude]);
 
         _listView.ContextMenuStrip = _listContextMenu;
 
@@ -745,6 +758,21 @@ public partial class MainForm : Form
             """;
         Clipboard.SetText(details);
         SetStatus($"Copied details for {ev.App.Name} to clipboard.");
+    }
+
+    private void OnContextExclude(object? sender, EventArgs e)
+    {
+        var ev = GetSelectedEvent();
+        if (ev == null) return;
+
+        var existing = _exclusionStore.GetEntry(ev.App.Name);
+        var prefill = existing ?? new Models.ExclusionEntry(ev.App.Name, true, false);
+
+        if (ExclusionsForm.ShowExclusionDialogStatic(prefill, _theme, this, out var result))
+        {
+            _exclusionStore.Add(result);
+            SetStatus($"✓ Exclusion saved for \"{result.AppName}\"");
+        }
     }
 
     private void BuildStatusBar()
@@ -944,8 +972,9 @@ public partial class MainForm : Form
                 if (saved != null)
                 {
                     newEvents = ChangeDetector.Detect(saved, current);
-                    if (newEvents.Count > 0)
-                        _store.AppendHistory(newEvents);
+                    var toLog = newEvents.Where(e => !_exclusionStore.IsExcludedFromLogging(e.App.Name)).ToList();
+                    if (toLog.Count > 0)
+                        _store.AppendHistory(toLog);
                 }
                 _store.SaveSnapshot(current);
                 _lastSnapshot = current;
@@ -953,8 +982,9 @@ public partial class MainForm : Form
             else
             {
                 newEvents = ChangeDetector.Detect(_lastSnapshot, current);
-                if (newEvents.Count > 0)
-                    _store.AppendHistory(newEvents);
+                var toLog = newEvents.Where(e => !_exclusionStore.IsExcludedFromLogging(e.App.Name)).ToList();
+                if (toLog.Count > 0)
+                    _store.AppendHistory(toLog);
                 _lastSnapshot = current;
                 _store.SaveSnapshot(current);
             }
@@ -1064,6 +1094,12 @@ public partial class MainForm : Form
             }
             catch { }
 
+            // 5. Apply exclusions — remove logging-excluded apps, track notification-excluded
+            var loggingExcluded = newEvents.Where(e => _exclusionStore.IsExcludedFromLogging(e.App.Name)).ToList();
+            newEvents.RemoveAll(e => _exclusionStore.IsExcludedFromLogging(e.App.Name));
+
+            var notifyEvents = newEvents.Where(e => !_exclusionStore.IsExcludedFromNotifications(e.App.Name)).ToList();
+
             if (_isClosing || !IsHandleCreated) return;
             try
             {
@@ -1074,7 +1110,7 @@ public partial class MainForm : Form
                     {
                         _allEvents.InsertRange(0, newEvents);
                         ApplyFilter();
-                        ShowNotifications(newEvents);
+                        ShowNotifications(notifyEvents);
                     }
 
                     SetStatus($"Last scanned: {DateTime.Now:HH:mm:ss}  ·  {current.Count} apps tracked  ·  {_allEvents.Count} change events  ·  Sources: Registry, EventLog, FileSystem, Services");
@@ -1511,7 +1547,7 @@ public partial class MainForm : Form
                 Cursor = Cursors.Default;
                 _btnInstalledApps.Enabled = true;
                 SetStatus($"Ready  ·  {apps.Count} apps found on this machine");
-                using var frm = new InstalledAppsForm(apps, _theme, _isDarkMode, _pkgDetector);
+                using var frm = new InstalledAppsForm(apps, _theme, _isDarkMode, _pkgDetector, _exclusionStore);
                 frm.ShowDialog(this);
             });
         });
