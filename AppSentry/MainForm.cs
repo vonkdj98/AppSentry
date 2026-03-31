@@ -89,6 +89,10 @@ public partial class MainForm : Form
     private const uint SND_ASYNC = 0x0001;
     private const uint SND_ALIAS = 0x00010000;
 
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    private const int SW_SHOWNOACTIVATE = 4;
+
     private void DetectTheme()
     {
         // Load saved preference
@@ -1165,7 +1169,7 @@ public partial class MainForm : Form
                 }
             }
         }, autoHideSeconds: _notifyAutoHideSeconds);
-        _activeNotification.Show();
+        ShowWindow(_activeNotification.Handle, SW_SHOWNOACTIVATE);
     }
 
     // ── Search / Filter ──────────────────────────────────────────────────────
