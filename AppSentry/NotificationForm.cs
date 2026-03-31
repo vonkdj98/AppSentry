@@ -14,6 +14,14 @@ internal class NotificationForm : Form
     private const int WM_MOUSEACTIVATE = 0x0021;
     private const int MA_NOACTIVATE = 0x0003;
 
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
+        int X, int Y, int cx, int cy, uint uFlags);
+    private static readonly IntPtr HWND_TOPMOST = new(-1);
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOACTIVATE = 0x0010;
+
     protected override void WndProc(ref Message m)
     {
         if (m.Msg == WM_MOUSEACTIVATE)
@@ -50,7 +58,6 @@ internal class NotificationForm : Form
         // Form setup — borderless, topmost, no taskbar
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
-        TopMost = true;
         StartPosition = FormStartPosition.Manual;
         BackColor = _theme.FormBg;
         ForeColor = _theme.FormFg;
@@ -278,6 +285,9 @@ internal class NotificationForm : Form
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
+        // Set topmost without stealing focus
+        SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         SlideIn();
     }
 
