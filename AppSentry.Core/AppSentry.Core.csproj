@@ -11,6 +11,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="AppSentry.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.20" />
     <PackageReference Include="System.Diagnostics.EventLog" Version="9.0.20" />
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="9.0.20" />
