@@ -1,5 +1,4 @@
 using AppSentry.Models;
-using Microsoft.Win32;
 
 namespace AppSentry;
 
@@ -177,89 +176,64 @@ internal class DiffViewForm : Form
 
     private record DiffEntry(string Property, string OldValue, string NewValue, string Status);
 
+    /// <summary>
+    /// Diffs the app as it was before the change against the app as it was after, both captured
+    /// at detection time. (v1 compared the post-update record against the registry "now", so the
+    /// "Old Value" column actually showed the new version.)
+    /// </summary>
     private static List<DiffEntry> ComputeDiff(ChangeEvent ev)
     {
         var diffs = new List<DiffEntry>();
-        var app = ev.App;
+        var before = ev.PreviousApp;
+        var after = ev.App;
 
-        // Try to read current registry values and compare with stored app data
-        var currentValues = ReadRegistryValues(app.KeyPath);
-        var storedValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        if (before == null)
         {
-            ["DisplayName"] = app.Name,
-            ["DisplayVersion"] = app.Version,
-            ["Publisher"] = app.Publisher,
-            ["InstallDate"] = app.InstallDate,
-            ["InstallLocation"] = app.InstallLocation,
-            ["InstallSource"] = app.InstallSource
-        };
-
-        // If we can read current registry, compare each property
-        if (currentValues.Count > 0)
-        {
-            var allKeys = new HashSet<string>(storedValues.Keys.Concat(currentValues.Keys),
-                StringComparer.OrdinalIgnoreCase);
-
-            foreach (var key in allKeys.OrderBy(k => k))
-            {
-                storedValues.TryGetValue(key, out var oldVal);
-                currentValues.TryGetValue(key, out var newVal);
-                oldVal ??= "";
-                newVal ??= "";
-
-                if (oldVal == newVal && string.IsNullOrEmpty(oldVal)) continue;
-
-                string status;
-                if (string.IsNullOrEmpty(oldVal) && !string.IsNullOrEmpty(newVal))
-                    status = "Added";
-                else if (!string.IsNullOrEmpty(oldVal) && string.IsNullOrEmpty(newVal))
-                    status = "Removed";
-                else if (!oldVal.Equals(newVal, StringComparison.Ordinal))
-                    status = "Changed";
-                else
-                    status = "Same";
-
-                diffs.Add(new DiffEntry(key, oldVal, newVal, status));
-            }
-        }
-        else
-        {
-            // Can't read registry — show what we know from the event
+            // Recorded by v1, which didn't keep the previous values.
             if (!string.IsNullOrEmpty(ev.PreviousVersion))
-                diffs.Add(new DiffEntry("DisplayVersion", ev.PreviousVersion, app.Version, "Changed"));
-            diffs.Add(new DiffEntry("DisplayName", app.Name, app.Name, "Same"));
-            diffs.Add(new DiffEntry("Publisher", app.Publisher, app.Publisher, "Same"));
-            if (!string.IsNullOrEmpty(app.InstallDate))
-                diffs.Add(new DiffEntry("InstallDate", "", app.InstallDate, "Changed"));
+                diffs.Add(new DiffEntry("DisplayVersion", ev.PreviousVersion, after.Version, "Changed"));
+            diffs.Add(new DiffEntry("(note)", "Previous values weren't recorded for this event", "", "—"));
+            return diffs;
         }
 
+        if (!before.KeyPath.Equals(after.KeyPath, StringComparison.OrdinalIgnoreCase))
+            diffs.Add(new DiffEntry("(registry key)", before.KeyPath, after.KeyPath, "Changed"));
+
+        var oldValues = before.RawValues ?? BasicValues(before);
+        var newValues = after.RawValues ?? BasicValues(after);
+        var changed = new List<DiffEntry>();
+        var same = new List<DiffEntry>();
+
+        foreach (var key in oldValues.Keys.Union(newValues.Keys, StringComparer.OrdinalIgnoreCase)
+                     .OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
+        {
+            oldValues.TryGetValue(key, out var oldVal);
+            newValues.TryGetValue(key, out var newVal);
+            oldVal ??= "";
+            newVal ??= "";
+            if (oldVal.Length == 0 && newVal.Length == 0) continue;
+
+            var status = oldVal.Length == 0 ? "Added"
+                : newVal.Length == 0 ? "Removed"
+                : oldVal.Equals(newVal, StringComparison.Ordinal) ? "Same"
+                : "Changed";
+            (status == "Same" ? same : changed).Add(new DiffEntry(key, oldVal, newVal, status));
+        }
+
+        // Differences first, unchanged values after for context.
+        diffs.AddRange(changed);
+        diffs.AddRange(same);
         return diffs;
     }
 
-    private static Dictionary<string, string> ReadRegistryValues(string keyPath)
+    private static Dictionary<string, string> BasicValues(InstalledApp app) => new(StringComparer.OrdinalIgnoreCase)
     {
-        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        try
-        {
-            RegistryKey? hive = null;
-            string subPath;
-
-            if (keyPath.StartsWith("HKLM\\")) { hive = Registry.LocalMachine; subPath = keyPath[5..]; }
-            else if (keyPath.StartsWith("HKCU\\")) { hive = Registry.CurrentUser; subPath = keyPath[5..]; }
-            else if (keyPath.StartsWith("HKU\\")) { hive = Registry.Users; subPath = keyPath[4..]; }
-            else return values;
-
-            using var key = hive.OpenSubKey(subPath, false);
-            if (key == null) return values;
-
-            foreach (var name in key.GetValueNames())
-            {
-                var val = key.GetValue(name);
-                if (val != null)
-                    values[name] = val.ToString() ?? "";
-            }
-        }
-        catch { }
-        return values;
-    }
+        ["DisplayName"] = app.Name,
+        ["DisplayVersion"] = app.Version,
+        ["Publisher"] = app.Publisher,
+        ["InstallDate"] = app.InstallDate,
+        ["InstallLocation"] = app.InstallLocation,
+        ["InstallSource"] = app.InstallSource,
+        ["UninstallString"] = app.UninstallString
+    };
 }
