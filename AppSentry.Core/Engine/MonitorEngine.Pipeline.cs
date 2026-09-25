@@ -117,6 +117,9 @@ public sealed partial class MonitorEngine
         });
 
         // ── 7. Commit ─────────────────────────────────────────────────────────
+        // Size is captured now, once; the UI never walks folders again.
+        events = SizeCalculator.Fill(events, TimeSpan.FromSeconds(20));
+
         var state = new Dictionary<string, object?>();
         Stage(state, StateKeys.Snapshot, snapshot);
         Stage(state, StateKeys.KnownScopes, diff.KnownScopes.OrderBy(s => s).ToList());
@@ -140,6 +143,7 @@ public sealed partial class MonitorEngine
         if (diff.BaselinedScopes.Count > 0)
             EngineLog.Info($"Baselined scope(s): {string.Join(", ", diff.BaselinedScopes)}");
         _firstScanDone = true;
+        RefreshTriggers();
 
         PublishStatus(s => s with
         {
