@@ -1,5 +1,4 @@
 using AppSentry.Models;
-using Microsoft.Win32;
 
 namespace AppSentry;
 
@@ -429,38 +428,7 @@ internal class InstalledAppsForm : Form
     private void OnContextUninstall(object? sender, EventArgs e)
     {
         var app = GetSelectedApp();
-        if (app == null) return;
-
-        var uninstallString = GetUninstallString(app.KeyPath);
-        if (string.IsNullOrWhiteSpace(uninstallString))
-        {
-            MessageBox.Show(
-                $"No uninstall command found for {app.Name}.\n\nYou can uninstall via Windows Settings > Apps.",
-                "Uninstall", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-
-        if (MessageBox.Show(
-                $"Uninstall {app.Name} {app.Version}?\n\nCommand: {uninstallString}",
-                "Confirm Uninstall", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
-            return;
-
-        try
-        {
-            var psi = new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = "cmd.exe",
-                Arguments = $"/c {uninstallString}",
-                UseShellExecute = true,
-                Verb = "runas"
-            };
-            System.Diagnostics.Process.Start(psi);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Failed to start uninstaller: {ex.Message}", "Error",
-                MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
+        if (app != null) UninstallAction.Run(this, app, text => _statusLabel.Text = text);
     }
 
     private void OnContextOpenLocation(object? sender, EventArgs e)
@@ -669,18 +637,6 @@ internal class InstalledAppsForm : Form
             Cursor = Cursors.Default;
             _btnRefresh.Enabled = true;
         }
-    }
-
-    // ── Static helpers ────────────────────────────────────────────────────────
-
-    private static string GetUninstallString(string keyPath)
-    {
-        try
-        {
-            using var key = AppSentry.Core.Util.RegistryPaths.OpenReadOnly(keyPath);
-            return key?.GetValue("UninstallString") as string ?? "";
-        }
-        catch { return ""; }
     }
 
     // ── UI helpers ────────────────────────────────────────────────────────────

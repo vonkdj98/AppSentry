@@ -133,3 +133,49 @@ public class SourceTests
         Assert.Equal(3, parsed.Count);
     }
 }
+
+public class UninstallerTests
+{
+    [Fact]
+    public void Msi_modify_command_becomes_remove()
+    {
+        var plan = AppSentry.Core.Uninstaller.Plan(new InstalledApp
+        {
+            KeyPath = @"HKLM\NOPE\{12345678-1234-1234-1234-123456789012}",
+            Scope = Scopes.Machine64,
+            UninstallString = "MsiExec.exe /I{12345678-1234-1234-1234-123456789012}"
+        });
+        Assert.NotNull(plan);
+        Assert.Equal("msiexec.exe", plan.FileName);
+        Assert.Equal("/x {12345678-1234-1234-1234-123456789012}", plan.Arguments);
+        Assert.True(plan.Elevate);
+    }
+
+    [Fact]
+    public void Per_user_uninstaller_is_split_and_not_elevated()
+    {
+        var plan = AppSentry.Core.Uninstaller.Plan(new InstalledApp
+        {
+            KeyPath = @"HKU\S-1-5-21-1\NOPE\Tool",
+            Scope = @"HKU\S-1-5-21-1",
+            UninstallString = @"""C:\Users\me\AppData\Local\Programs\Tool (x64) & Co\Uninstall Tool.exe"" /currentuser"
+        });
+        Assert.NotNull(plan);
+        Assert.Equal(@"C:\Users\me\AppData\Local\Programs\Tool (x64) & Co\Uninstall Tool.exe", plan.FileName);
+        Assert.Equal("/currentuser", plan.Arguments);
+        Assert.False(plan.Elevate);
+    }
+
+    [Fact]
+    public void Store_app_uses_package_removal()
+    {
+        var plan = AppSentry.Core.Uninstaller.Plan(new InstalledApp
+        {
+            KeyPath = @"STORE\S-1-5-21-1\Contoso.App_abc",
+            Scope = @"STORE\S-1-5-21-1",
+            PackageFullName = "Contoso.App_1.0.0.0_x64__abc"
+        });
+        Assert.True(plan!.IsStore);
+        Assert.Equal("Contoso.App_1.0.0.0_x64__abc", plan.PackageFullName);
+    }
+}
