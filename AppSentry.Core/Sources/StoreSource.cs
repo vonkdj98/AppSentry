@@ -81,8 +81,12 @@ public static partial class StoreSource
 
             var v = id.Version;
             var version = $"{v.Major}.{v.Minor}.{v.Build}.{v.Revision}";
-            var location = (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041) ? Try(() => package.InstalledPath) : null)
-                ?? Try(() => package.InstalledLocation?.Path) ?? "";
+            string? location = null;
+            if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041))
+            {
+                try { location = package.InstalledPath; } catch { }
+            }
+            location ??= Try(() => package.InstalledLocation?.Path) ?? "";
             DateTime? installed = null;
             try { installed = package.InstalledDate.UtcDateTime; } catch { }
 
