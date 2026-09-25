@@ -216,32 +216,14 @@ internal class NotificationForm : Form
         {
             Location = new Point(4, yPos),
             Size = new Size(340, 48),
-            BackColor = ev.ChangeType switch
-            {
-                ChangeType.Installed => _theme.InstalledBg,
-                ChangeType.Updated => _theme.UpdatedBg,
-                ChangeType.Removed => _theme.RemovedBg,
-                _ => _theme.AltRowBg
-            }
+            BackColor = EventDisplay.RowBackground(ev.ChangeType, _theme)
         };
 
         var changeIcon = new Label
         {
-            Text = ev.ChangeType switch
-            {
-                ChangeType.Installed => "⬇",
-                ChangeType.Updated => "⟳",
-                ChangeType.Removed => "✕",
-                _ => "•"
-            },
+            Text = EventDisplay.Icon(ev.ChangeType),
             Font = new Font("Segoe UI", 12f),
-            ForeColor = ev.ChangeType switch
-            {
-                ChangeType.Installed => _theme.InstalledAccent,
-                ChangeType.Updated => _theme.UpdatedAccent,
-                ChangeType.Removed => _theme.RemovedAccent,
-                _ => _theme.MutedFg
-            },
+            ForeColor = EventDisplay.Accent(ev.ChangeType, _theme),
             Location = new Point(10, 12),
             AutoSize = true,
             BackColor = Color.Transparent
@@ -258,13 +240,7 @@ internal class NotificationForm : Form
             MaximumSize = new Size(280, 0)
         };
 
-        var detailText = ev.ChangeType switch
-        {
-            ChangeType.Installed => $"Installed  ·  v{ev.App.Version}",
-            ChangeType.Updated => $"Updated  ·  {ev.PreviousVersion} → {ev.App.Version}",
-            ChangeType.Removed => $"Removed  ·  v{ev.App.Version}",
-            _ => ev.ChangeType.ToString()
-        };
+        var detailText = EventDisplay.Summary(ev);
 
         var detailLabel = new Label
         {
@@ -382,43 +358,11 @@ internal class NotificationForm : Form
         return 44 + contentHeight + 50; // header + content + footer
     }
 
-    private string GetHeaderIcon() => _events.Count == 1
-        ? _events[0].ChangeType switch
-        {
-            ChangeType.Installed => "⬇",
-            ChangeType.Updated => "⟳",
-            ChangeType.Removed => "✕",
-            _ => "ℹ"
-        }
-        : "ℹ";
+    private string GetHeaderIcon() => _events.Count == 1 ? EventDisplay.Icon(_events[0].ChangeType) : "ℹ";
 
-    private string GetHeaderTitle()
-    {
-        if (_events.Count == 1)
-        {
-            return _events[0].ChangeType switch
-            {
-                ChangeType.Installed => "App Installed",
-                ChangeType.Updated => "App Updated",
-                ChangeType.Removed => "App Removed",
-                _ => "App Change Detected"
-            };
-        }
-        return $"{_events.Count} Changes Detected";
-    }
+    private string GetHeaderTitle() =>
+        _events.Count == 1 ? EventDisplay.Title(_events[0].ChangeType) : $"{_events.Count} Changes Detected";
 
-    private Color GetAccentColor()
-    {
-        if (_events.Count == 1)
-        {
-            return _events[0].ChangeType switch
-            {
-                ChangeType.Installed => _theme.InstalledAccent,
-                ChangeType.Updated => _theme.UpdatedAccent,
-                ChangeType.Removed => _theme.RemovedAccent,
-                _ => _theme.UpdatedAccent
-            };
-        }
-        return _theme.UpdatedAccent;
-    }
+    private Color GetAccentColor() =>
+        _events.Count == 1 ? EventDisplay.Accent(_events[0].ChangeType, _theme) : _theme.UpdatedAccent;
 }

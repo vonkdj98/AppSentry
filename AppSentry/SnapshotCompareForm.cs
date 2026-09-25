@@ -200,14 +200,9 @@ internal class SnapshotCompareForm : Form
         _resultList.DrawSubItem += (_, e) =>
         {
             if (e.Item == null || e.SubItem == null) return;
-            var changeText = e.Item.SubItems.Count > 3 ? e.Item.SubItems[3].Text : "";
-            var rowBg = changeText switch
-            {
-                "Installed" => _theme.InstalledBg,
-                "Updated" => _theme.UpdatedBg,
-                "Removed" => _theme.RemovedBg,
-                _ => (e.ItemIndex % 2 == 0) ? _theme.ListBg : _theme.AltRowBg
-            };
+            var type = (e.Item.Tag as ChangeEvent)?.ChangeType;
+            var rowBg = type is { } t ? EventDisplay.RowBackground(t, _theme)
+                : (e.ItemIndex % 2 == 0) ? _theme.ListBg : _theme.AltRowBg;
             if (e.Item.Selected) rowBg = _theme.SelectedBg;
 
             using (var bg = new SolidBrush(rowBg))
@@ -216,16 +211,8 @@ internal class SnapshotCompareForm : Form
                 e.Graphics.DrawLine(pen, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
 
             var fg = e.Item.Selected ? _theme.SelectedFg : _theme.ListFg;
-            if (e.ColumnIndex == 3 && !e.Item.Selected)
-            {
-                fg = changeText switch
-                {
-                    "Installed" => _theme.InstalledAccent,
-                    "Updated" => _theme.UpdatedAccent,
-                    "Removed" => _theme.RemovedAccent,
-                    _ => fg
-                };
-            }
+            if (e.ColumnIndex == 3 && !e.Item.Selected && type is { } changeType)
+                fg = EventDisplay.Accent(changeType, _theme);
 
             var bounds = new Rectangle(e.Bounds.X + 6, e.Bounds.Y, e.Bounds.Width - 12, e.Bounds.Height);
             TextRenderer.DrawText(e.Graphics, e.SubItem.Text, _resultList.Font, bounds, fg,
@@ -307,14 +294,11 @@ internal class SnapshotCompareForm : Form
 
         _resultList.EndUpdate();
 
-        var installs = filtered.Count(e => e.ChangeType == ChangeType.Installed);
-        var updates = filtered.Count(e => e.ChangeType == ChangeType.Updated);
-        var removals = filtered.Count(e => e.ChangeType == ChangeType.Removed);
-
-        var parts = new List<string>();
-        if (installs > 0) parts.Add($"{installs} installed");
-        if (updates > 0) parts.Add($"{updates} updated");
-        if (removals > 0) parts.Add($"{removals} removed");
+        var parts = filtered
+            .GroupBy(e => e.ChangeType)
+            .OrderBy(g => g.Key)
+            .Select(g => $"{g.Count()} {g.Key.ToString().ToLowerInvariant()}")
+            .ToList();
 
         _summaryLabel.Text = filtered.Count == 0
             ? $"  No changes found between {from:yyyy-MM-dd HH:mm} and {to:yyyy-MM-dd HH:mm}."

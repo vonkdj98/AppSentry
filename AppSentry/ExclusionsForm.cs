@@ -296,7 +296,7 @@ internal class ExclusionsForm : Form
 
         var lblName = new Label
         {
-            Text = "App Name (exact match, case-insensitive):",
+            Text = "App name — exact, or with * wildcards (versions are ignored):",
             Location = new Point(20, 20),
             AutoSize = true,
             ForeColor = theme.MutedFg,
