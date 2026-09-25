@@ -141,7 +141,8 @@ public sealed class PipeServer : IDisposable
                     ClientName = client.Name,
                     Status = _engine.Status
                 }),
-                PipeProtocol.Ops.History => Ok(_engine.GetHistory()),
+                PipeProtocol.Ops.HistoryPage => Ok(_engine.GetHistoryPage(Arg<HistoryQuery>(request) ?? new HistoryQuery())),
+                PipeProtocol.Ops.Event => Ok(_engine.GetEvent(Arg<long>(request))),
                 PipeProtocol.Ops.Inventory => Ok(_engine.GetInventory()),
                 PipeProtocol.Ops.Persistence => Ok(_engine.GetPersistence()),
                 PipeProtocol.Ops.Scan => Do(() => _engine.RequestScan($"requested by {client.Name}", TimeSpan.Zero)),

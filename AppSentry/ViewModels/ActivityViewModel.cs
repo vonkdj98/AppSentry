@@ -169,9 +169,20 @@ public sealed class ActivityViewModel : ObservableObject, IPage
 
     public int ShownCount { get => _shownCount; private set => Set(ref _shownCount, value); }
 
-    public string ResultText => _shell.AllEvents.Count == 0
-        ? ""
-        : ShownCount == _shell.AllEvents.Count ? $"{ShownCount:N0} changes" : $"Showing {ShownCount:N0} of {_shell.AllEvents.Count:N0} changes";
+    public string ResultText
+    {
+        get
+        {
+            if (_shell.AllEvents.Count == 0) return _shell.IsLoadingHistory ? "Loading history…" : "";
+            var text = ShownCount == _shell.AllEvents.Count ? $"{ShownCount:N0} changes" : $"Showing {ShownCount:N0} of {_shell.AllEvents.Count:N0} changes";
+            return _shell.IsLoadingHistory
+                ? $"{text} · loading older changes ({_shell.AllEvents.Count:N0} of {_shell.TotalHistoryCount:N0})"
+                : text;
+        }
+    }
+
+    /// <summary>An older page arrived: update the counter without rebuilding the list every time.</summary>
+    public void OnHistoryProgress() => OnPropertyChanged(nameof(ResultText));
 
     public bool IsEmpty => ShownCount == 0;
 
@@ -219,6 +230,10 @@ public sealed class ActivityViewModel : ObservableObject, IPage
             var allIds = _shell.AllEvents.Select(e => e.Id).ToHashSet();
             foreach (var stale in _cache.Keys.Where(id => !allIds.Contains(id)).ToList()) _cache.Remove(stale);
         }
+
+        // Newest first by the time shown on each row, so day groups never interleave
+        // (database ids don't have to follow time: imported v1 history, clock changes).
+        rows.Sort((a, b) => b.Event.EffectiveTime.CompareTo(a.Event.EffectiveTime));
 
         InstalledCount = installed;
         UpdatedCount = updated;

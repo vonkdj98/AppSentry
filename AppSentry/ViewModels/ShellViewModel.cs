@@ -220,21 +220,61 @@ public sealed class ShellViewModel : ObservableObject
         OnPropertiesChanged(nameof(CanModify), nameof(IsReadOnly), nameof(ModeLabel), nameof(StatusDetail));
     }
 
+    private const int FirstPageSize = 1000;
+    private const int PageSize = 5000;
+    private bool _isLoadingHistory;
+    private int _totalHistoryCount;
+
+    /// <summary>True while older pages of history are still arriving.</summary>
+    public bool IsLoadingHistory
+    {
+        get => _isLoadingHistory;
+        private set => Set(ref _isLoadingHistory, value);
+    }
+
+    /// <summary>How many changes the engine holds in total (from the last page).</summary>
+    public int TotalHistoryCount
+    {
+        get => _totalHistoryCount;
+        private set => Set(ref _totalHistoryCount, value);
+    }
+
+    /// <summary>
+    /// Loads history in pages: the newest page is shown immediately, older pages stream in behind
+    /// it. Pages are "slim" (no raw registry values), so even a large history is a few MB.
+    /// </summary>
     public async Task ReloadHistoryAsync()
     {
-        var history = await Backend.GetHistoryAsync();
-        var ids = history.Select(e => e.Id).ToHashSet();
-        // Keep anything a scan delivered while the history was loading.
-        AllEvents = AllEvents.Where(e => !ids.Contains(e.Id)).Concat(history).ToList();
-        _knownIds.Clear();
-        _knownIds.UnionWith(AllEvents.Select(e => e.Id));
+        IsLoadingHistory = true;
+        try
+        {
+            var page = await Backend.GetHistoryPageAsync(new HistoryQuery { Limit = FirstPageSize });
+            TotalHistoryCount = page.TotalCount;
+            var ids = page.Events.Select(e => e.Id).ToHashSet();
+            // Keep anything a scan delivered while the history was loading.
+            AllEvents = AllEvents.Where(e => !ids.Contains(e.Id)).Concat(page.Events).ToList();
+            _knownIds.Clear();
+            _knownIds.UnionWith(AllEvents.Select(e => e.Id));
+            Activity.Refresh();
+            RecountAttention();
 
-        // Forget "reviewed" marks for events that no longer exist (history cleared).
-        if (Settings.ReviewedEventIds.RemoveWhere(id => !_knownIds.Contains(id)) > 0) SaveSettings();
+            while (page.HasMore && page.Events.Count > 0)
+            {
+                page = await Backend.GetHistoryPageAsync(new HistoryQuery { BeforeId = page.Events[^1].Id, Limit = PageSize });
+                AllEvents.AddRange(page.Events.Where(e => _knownIds.Add(e.Id)));
+                Activity.OnHistoryProgress();
+            }
 
-        Activity.Refresh();
-        Exclusions.RefreshMatchCounts();
-        RecountAttention();
+            // Only once everything is here: forget "reviewed" marks for events that no longer exist.
+            if (Settings.ReviewedEventIds.RemoveWhere(id => !_knownIds.Contains(id)) > 0) SaveSettings();
+        }
+        finally
+        {
+            IsLoadingHistory = false;
+            Activity.Refresh();
+            Exclusions.RefreshMatchCounts();
+            RecountAttention();
+        }
     }
 
     private void OnEventsDetected(IReadOnlyList<ChangeEvent> events)
@@ -311,8 +351,7 @@ public sealed class ShellViewModel : ObservableObject
     public static void OnUi(Action action)
     {
         var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher == null) return;
-        if (dispatcher.CheckAccess()) action();
+        if (dispatcher == null || dispatcher.CheckAccess()) action(); // no UI thread (tests) or already on it
         else dispatcher.BeginInvoke(action);
     }
 }

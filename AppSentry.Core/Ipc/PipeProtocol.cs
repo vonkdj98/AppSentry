@@ -11,12 +11,13 @@ namespace AppSentry.Core.Ipc;
 public static class PipeProtocol
 {
     public const string DefaultPipeName = "AppSentry";
-    public const int Version = 1;
+    public const int Version = 2; // 2: paged, slim history (historyPage / event) and the persistence op
 
     public static class Ops
     {
         public const string Hello = "hello";
-        public const string History = "history";
+        public const string HistoryPage = "historyPage";
+        public const string Event = "event";
         public const string Inventory = "inventory";
         public const string Persistence = "persistence";
         public const string Scan = "scan";

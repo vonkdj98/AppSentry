@@ -35,7 +35,9 @@ public sealed class LocalBackend : IMonitorBackend
 
     public Task StartAsync() => Task.Run(_engine.Start);
 
-    public Task<List<ChangeEvent>> GetHistoryAsync() => Task.Run(_engine.GetHistory);
+    public Task<HistoryPage> GetHistoryPageAsync(HistoryQuery query) => Task.Run(() => _engine.GetHistoryPage(query));
+
+    public Task<ChangeEvent?> GetEventAsync(long id) => Task.Run(() => _engine.GetEvent(id));
 
     public Task<List<InstalledApp>> GetInventoryAsync() => Task.Run(_engine.GetInventory);
 

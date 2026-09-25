@@ -23,7 +23,11 @@ public interface IMonitorBackend : IDisposable
 
     Task StartAsync();
 
-    Task<List<ChangeEvent>> GetHistoryAsync();
+    /// <summary>One page of history, newest first (see <see cref="HistoryQuery"/>).</summary>
+    Task<HistoryPage> GetHistoryPageAsync(HistoryQuery query);
+
+    /// <summary>A single event with everything captured for it (used by the details pane).</summary>
+    Task<ChangeEvent?> GetEventAsync(long id);
 
     Task<List<InstalledApp>> GetInventoryAsync();
 

@@ -88,6 +88,9 @@ public sealed partial class MonitorEngine : IDisposable
 
         EngineLog.Info($"Engine started ({Context.Describe()}), data in {_options.DataDir}");
 
+        try { ApplyRetention(); }
+        catch (Exception ex) { EngineLog.Error("Retention failed", ex); }
+
         _scanTimer = new Timer(_ => RunDueScan(), null, Timeout.Infinite, Timeout.Infinite);
         _heartbeat = new Timer(_ => Heartbeat(), null, HeartbeatPeriod, HeartbeatPeriod);
         OnStarted();
@@ -146,6 +149,56 @@ public sealed partial class MonitorEngine : IDisposable
 
     public List<ChangeEvent> GetHistory() => Store.LoadEvents();
 
+    /// <summary>One page of history, newest first; slim pages leave out app events' raw registry values.</summary>
+    public HistoryPage GetHistoryPage(HistoryQuery query)
+    {
+        var events = Store.LoadEventsPage(query.BeforeId, query.Limit, out var hasMore);
+        return new HistoryPage
+        {
+            Events = query.Slim ? events.Select(Slim).ToList() : events,
+            HasMore = hasMore,
+            TotalCount = Store.CountEvents()
+        };
+    }
+
+    public ChangeEvent? GetEvent(long id) => Store.LoadEvent(id);
+
+    /// <summary>
+    /// App events carry every value of the uninstall key before and after (the bulk of an event).
+    /// Lists don't need them; the details pane fetches the full event. Service and task events keep
+    /// theirs: they're small and the "needs a look" rules read them.
+    /// </summary>
+    public static ChangeEvent Slim(ChangeEvent ev)
+    {
+        if (ev.Source is DetectionSource.Service or DetectionSource.Driver or DetectionSource.ScheduledTask) return ev;
+        if (ev.App.RawValues == null && ev.PreviousApp?.RawValues == null) return ev;
+        return ev with
+        {
+            App = ev.App with { RawValues = null },
+            PreviousApp = ev.PreviousApp == null ? null : ev.PreviousApp with { RawValues = null }
+        };
+    }
+
+    // ── Retention ─────────────────────────────────────────────────────────────
+
+    private DateTime _lastRetentionUtc = DateTime.MinValue;
+
+    /// <summary>Deletes history older than the retention setting (if one is set). Returns how many were removed.</summary>
+    public int ApplyRetention()
+    {
+        _lastRetentionUtc = DateTime.UtcNow;
+        var days = _settings.RetentionDays;
+        if (days <= 0) return 0;
+        var cutoff = DateTime.UtcNow.AddDays(-days);
+        var deleted = Store.DeleteEventsBefore(cutoff);
+        if (deleted > 0)
+        {
+            EngineLog.Info($"Retention: deleted {deleted} change(s) older than {days} days");
+            PublishStatus(s => s with { Notice = $"Deleted {deleted:N0} changes older than {days} days" });
+        }
+        return deleted;
+    }
+
     public void ClearHistory()
     {
         Store.ClearEvents();
@@ -172,11 +225,17 @@ public sealed partial class MonitorEngine : IDisposable
 
     public void UpdateSettings(EngineSettings settings)
     {
-        var clean = settings with { ScanIntervalMinutes = Math.Clamp(settings.ScanIntervalMinutes, 0, 24 * 60) };
+        var clean = settings with
+        {
+            ScanIntervalMinutes = Math.Clamp(settings.ScanIntervalMinutes, 0, 24 * 60),
+            RetentionDays = Math.Clamp(settings.RetentionDays, 0, 3650)
+        };
         Store.SetState(StateKeys.Settings, clean);
         var realtimeChanged = clean.RealtimeEnabled != _settings.RealtimeEnabled;
+        var retentionChanged = clean.RetentionDays != _settings.RetentionDays;
         _settings = clean;
         if (realtimeChanged) OnRealtimeSettingChanged();
+        if (retentionChanged) ApplyRetention();
     }
 
     // ── Scheduling internals ──────────────────────────────────────────────────
@@ -239,6 +298,9 @@ public sealed partial class MonitorEngine : IDisposable
             var interval = _settings.ScanIntervalMinutes;
             if (interval > 0 && now - _lastScanCompletedUtc >= TimeSpan.FromMinutes(interval))
                 RequestScan("interval", TimeSpan.Zero);
+
+            if (_settings.RetentionDays > 0 && now - _lastRetentionUtc > TimeSpan.FromDays(1))
+                ApplyRetention();
 
             DateTime? followUp;
             lock (_schedLock) followUp = _followUpDueUtc;
