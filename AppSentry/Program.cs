@@ -19,8 +19,8 @@ internal static class Program
     /// AppSentry.exe --install-service     copy to Program Files, register and start the service (UAC prompt)
     /// AppSentry.exe --uninstall-service   stop and remove the service; history is kept
     /// AppSentry.exe --data-dir &lt;path&gt;     monitor in-process against another folder (testing, portable use)
-    /// AppSentry.exe --demo                sample data, no monitoring (design review)
-    /// AppSentry.exe --screenshots &lt;dir&gt;   render every page with sample data to PNGs, then exit
+    /// AppSentry.exe --demo [--synthetic]  sample data, no monitoring (design review); --synthetic = no data from this PC
+    /// AppSentry.exe --screenshots &lt;dir&gt;   render every page with sample data to PNGs, then exit (--theme, --synthetic)
     /// AppSentry.exe --export-icon &lt;path&gt;  write the app icon (.ico)
     /// </summary>
     [STAThread]
@@ -41,7 +41,7 @@ internal static class Program
         if (Value(args, "--screenshots") is { } shotDir)
         {
             UiSettingsStore.InMemoryOnly = true;
-            return ScreenshotRunner.Run(Path.GetFullPath(shotDir), Value(args, "--theme") ?? "Light");
+            return ScreenshotRunner.Run(Path.GetFullPath(shotDir), Value(args, "--theme") ?? "Light", Has(args, "--synthetic"));
         }
 
         // Restarting after a service install/uninstall: wait for the old window to exit first.
@@ -69,7 +69,7 @@ internal static class Program
         }
 
         IMonitorBackend backend = demo
-            ? new DemoBackend()
+            ? new DemoBackend(Has(args, "--synthetic"))
             : dataDir != null
                 ? new LocalBackend(dataDir)
                 : PipeBackend.TryConnect(TimeSpan.FromMilliseconds(700)) ?? (IMonitorBackend)new LocalBackend(LocalBackend.DefaultDataDir);

@@ -47,6 +47,8 @@ The same rules set the Windows event log level (Error / Warning / Information), 
 - **Background service** (optional): runs as LocalSystem, covers every user, keeps monitoring when nobody is signed in; the tray app connects to it automatically
 - Every change written to the **Windows Application log** (source `AppSentry`) for SIEM collection (e.g. Wazuh)
 - **Export CSV** of the full history, including the attention reason for flagged items
+- **History retention** (optional): keep everything (the default), or delete changes older than 1 month to 2 years, once a day
+- Large histories stay fast: the list loads in pages without the bulky before/after registry values, which are fetched only for the change you open
 - Single-instance: launching again brings the running window forward
 - Configurable safety-net scan interval (1, 5, 10, 30 minutes, or off)
 
@@ -58,9 +60,35 @@ The same rules set the Windows event log level (Error / Warning / Information), 
 | `--minimized` | Start hidden in the notification area (used by Start with Windows) |
 | `--install-service` / `--uninstall-service` | Install or remove the background service (UAC prompt) |
 | `--data-dir <path>` | Monitor in-process against another folder (testing, portable use) |
-| `--demo` | Sample data, no monitoring — for design review |
-| `--screenshots <dir> [--theme Light\|Dark]` | Render every page with sample data to PNGs, then exit |
+| `--demo [--synthetic]` | Sample data, no monitoring — for design review. With `--synthetic`, nothing comes from this PC |
+| `--screenshots <dir> [--theme Light\|Dark] [--synthetic]` | Render every page with sample data to PNGs, then exit |
 | `--export-icon <path>` | Write the app icon (.ico) |
+
+## Screenshots
+
+*Sample data (`AppSentry.exe --demo --synthetic`) — every app, service, task and account is made up.*
+
+**Activity** — changes grouped by day, "needs a look" flags, and the details pane with the before/after diff:
+
+![Activity](docs/screenshots/activity.png)
+
+**Activity in dark mode** — an update with the version diff:
+
+![Activity, dark](docs/screenshots/activity-dark.png)
+
+**Installed apps** — icons, size bars and per-app history:
+
+![Installed apps](docs/screenshots/installed-apps.png)
+
+**Services and tasks** — what runs with Windows, with Microsoft's own components hidden:
+
+![Services and tasks](docs/screenshots/services-dark.png)
+
+**Settings:**
+
+![Settings](docs/screenshots/settings.png)
+
+Regenerate them with `AppSentry.exe --screenshots <folder> --theme Light --synthetic` (or `--theme Dark`).
 
 ## How It Works
 
@@ -176,7 +204,8 @@ AppSentry/                          # WPF tray app (Fluent theme)
   ViewModels/                       # one per page, plus the shell (navigation, status, "needs a look")
   Services/                         # notifications, tray, app icons, brand icon, settings, exports
   Demo/                             # sample-data backend and the screenshot renderer
-AppSentry.Tests/                    # xUnit
+AppSentry.Tests/                    # xUnit: engine, storage, sources, pipe (integration tests touch this PC)
+AppSentry.UiTests/                  # xUnit: view models (filters, paging, details, notification rules) against a fake backend
 ```
 
 ## Contributing
