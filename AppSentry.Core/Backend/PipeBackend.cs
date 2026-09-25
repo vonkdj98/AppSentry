@@ -81,6 +81,9 @@ public sealed class PipeBackend : IMonitorBackend
     public async Task<List<InstalledApp>> GetInventoryAsync() =>
         await RequestAsync<List<InstalledApp>>(PipeProtocol.Ops.Inventory).ConfigureAwait(false) ?? [];
 
+    public async Task<Sources.PersistenceInventory> GetPersistenceAsync() =>
+        await RequestAsync<Sources.PersistenceInventory>(PipeProtocol.Ops.Persistence).ConfigureAwait(false) ?? new Sources.PersistenceInventory();
+
     public Task RequestScanAsync() => RequestAsync<object>(PipeProtocol.Ops.Scan);
 
     public Task ClearHistoryAsync() => RequestAsync<object>(PipeProtocol.Ops.ClearHistory);

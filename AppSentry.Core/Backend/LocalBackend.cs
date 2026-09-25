@@ -39,6 +39,8 @@ public sealed class LocalBackend : IMonitorBackend
 
     public Task<List<InstalledApp>> GetInventoryAsync() => Task.Run(_engine.GetInventory);
 
+    public Task<Sources.PersistenceInventory> GetPersistenceAsync() => Task.Run(_engine.GetPersistence);
+
     public Task RequestScanAsync()
     {
         _engine.RequestScan("manual", TimeSpan.Zero);

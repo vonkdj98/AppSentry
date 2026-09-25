@@ -27,6 +27,9 @@ public interface IMonitorBackend : IDisposable
 
     Task<List<InstalledApp>> GetInventoryAsync();
 
+    /// <summary>Services, drivers and scheduled tasks the engine currently tracks.</summary>
+    Task<Sources.PersistenceInventory> GetPersistenceAsync();
+
     /// <summary>Queues a scan; completion is reported through <see cref="StatusChanged"/>.</summary>
     Task RequestScanAsync();
 

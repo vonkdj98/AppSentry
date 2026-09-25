@@ -143,6 +143,7 @@ public sealed class PipeServer : IDisposable
                 }),
                 PipeProtocol.Ops.History => Ok(_engine.GetHistory()),
                 PipeProtocol.Ops.Inventory => Ok(_engine.GetInventory()),
+                PipeProtocol.Ops.Persistence => Ok(_engine.GetPersistence()),
                 PipeProtocol.Ops.Scan => Do(() => _engine.RequestScan($"requested by {client.Name}", TimeSpan.Zero)),
                 PipeProtocol.Ops.ClearHistory => Do(_engine.ClearHistory),
                 PipeProtocol.Ops.GetExclusions => Ok(_engine.GetExclusions()),
