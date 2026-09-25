@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using AppSentry.Core.Detection;
 using AppSentry.Core.Util;
 using AppSentry.Models;
 
@@ -39,9 +40,13 @@ public static class WindowsEventLogWriter
         {
             try
             {
-                var entryType = ev.ChangeType is ChangeType.Failed or ChangeType.Modified
-                    ? EventLogEntryType.Warning
-                    : EventLogEntryType.Information;
+                // Same rules as the UI's "Needs a look", so a SIEM can alert on level alone.
+                var entryType = AttentionClassifier.Classify(ev).Level switch
+                {
+                    AttentionLevel.Critical => EventLogEntryType.Error,
+                    AttentionLevel.Warning => EventLogEntryType.Warning,
+                    _ => EventLogEntryType.Information
+                };
                 EventLog.WriteEntry(SourceName, Format(ev), entryType, EventIdFor(ev.ChangeType));
             }
             catch (Exception ex)
@@ -62,6 +67,8 @@ public static class WindowsEventLogWriter
             if (!string.IsNullOrWhiteSpace(value)) sb.AppendLine($"{key}: {value}");
         }
         Line("Change", ev.ChangeType.ToString());
+        var attention = AttentionClassifier.Classify(ev);
+        if (attention.Level >= AttentionLevel.Warning) Line("Attention", $"{attention.Level}: {attention.Reason}");
         Line("App", ev.App.Name);
         Line("Version", ev.App.Version);
         Line("PreviousVersion", ev.PreviousVersion);

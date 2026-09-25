@@ -50,6 +50,12 @@ public sealed partial class MonitorEngine
 
     private List<InstalledApp> CurrentInventory() => _snapshot.Values.ToList();
 
+    public PersistenceInventory GetPersistence() => new()
+    {
+        Services = _serviceBaseline?.Services.Values.OrderBy(s => s.DisplayName, StringComparer.OrdinalIgnoreCase).ToList() ?? [],
+        Tasks = _taskBaseline?.Tasks.Values.OrderBy(t => t.Path, StringComparer.OrdinalIgnoreCase).ToList() ?? []
+    };
+
     private void ScanOnce(string reason)
     {
         var started = DateTime.UtcNow;

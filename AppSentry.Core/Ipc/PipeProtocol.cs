@@ -18,6 +18,7 @@ public static class PipeProtocol
         public const string Hello = "hello";
         public const string History = "history";
         public const string Inventory = "inventory";
+        public const string Persistence = "persistence";
         public const string Scan = "scan";
         public const string ClearHistory = "clearHistory";
         public const string GetExclusions = "getExclusions";

@@ -95,8 +95,8 @@ When the service is running, the tray app shows "Service mode" and reads everyth
 | 1000 | Installed | Information |
 | 1001 | Updated | Information |
 | 1002 | Removed | Information |
-| 1003 | Modified | Warning |
-| 1004 | Failed | Warning |
+| 1003 | Modified | depends |
+| 1004 | Failed | depends |
 
 The message body is `Key: value` lines (App, Version, PreviousVersion, Publisher, ChangedBy, InstalledFor, Source, Key, OccurredAt, Details).
 

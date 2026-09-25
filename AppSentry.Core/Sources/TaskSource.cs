@@ -240,3 +240,10 @@ public static class TaskSource
         }
     }
 }
+
+/// <summary>What the engine currently tracks as persistence: services, drivers and scheduled tasks.</summary>
+public sealed record PersistenceInventory
+{
+    public List<ServiceRecord> Services { get; init; } = [];
+    public List<TaskRecord> Tasks { get; init; } = [];
+}
