@@ -12,6 +12,7 @@ namespace AppSentry.Tests;
 /// scheduled task in the user's own scheduler.
 /// </summary>
 [Trait("Category", "Integration")]
+[Collection("Machine")] // these touch shared machine state; never run them in parallel
 public class EngineChangeTests(ITestOutputHelper output)
 {
     private const string KeyName = "AppSentry.SmokeTest";
@@ -78,6 +79,42 @@ public class EngineChangeTests(ITestOutputHelper output)
         {
             try { Registry.CurrentUser.DeleteSubKey(uninstallPath, throwOnMissingSubKey: false); } catch { }
             ProcessRunner.Run("schtasks.exe", $"/Delete /TN {TaskName} /F", TimeSpan.FromSeconds(30));
+        }
+    }
+
+    [Fact]
+    public void Registry_change_is_picked_up_in_real_time_with_the_interval_off()
+    {
+        using var dir = new TempDir();
+        using var engine = new MonitorEngine(new EngineOptions { DataDir = dir.Path });
+        var scanned = new ManualResetEventSlim();
+        var detected = new ManualResetEventSlim();
+        engine.StatusChanged += (_, s) => { if (!s.IsScanning && s.LastScanUtc != null) scanned.Set(); };
+        engine.EventsDetected += (_, events) =>
+        {
+            if (events.Any(e => e.App.Name == "AppSentry Realtime Test")) detected.Set();
+        };
+
+        var path = $@"{RegistryPaths.Uninstall}\{KeyName}.Realtime";
+        try
+        {
+            engine.Start();
+            engine.UpdateSettings(new EngineSettings { ScanIntervalMinutes = 0, RealtimeEnabled = true });
+            Assert.True(scanned.Wait(TimeSpan.FromMinutes(3)), "baseline scan did not finish");
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            using (var key = Registry.CurrentUser.CreateSubKey(path))
+            {
+                key.SetValue("DisplayName", "AppSentry Realtime Test");
+                key.SetValue("DisplayVersion", "1.0");
+            }
+
+            Assert.True(detected.Wait(TimeSpan.FromSeconds(60)), "no event without an explicit scan request");
+            output.WriteLine($"Detected {sw.Elapsed.TotalSeconds:0.0}s after the registry write (10s debounce included)");
+        }
+        finally
+        {
+            try { Registry.CurrentUser.DeleteSubKey(path, throwOnMissingSubKey: false); } catch { }
         }
     }
 }

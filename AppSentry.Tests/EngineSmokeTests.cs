@@ -9,6 +9,7 @@ namespace AppSentry.Tests;
 /// services). Filter with: dotnet test --filter Category=Integration
 /// </summary>
 [Trait("Category", "Integration")]
+[Collection("Machine")] // these touch shared machine state; never run them in parallel
 public class EngineSmokeTests(ITestOutputHelper output)
 {
     [Fact]
