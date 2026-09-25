@@ -1,92 +1,62 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using AppSentry.Core.Backend;
 using AppSentry.Models;
 
 namespace AppSentry;
 
 /// <summary>
-/// Persists and queries the exclusion list in %APPDATA%\AppSentry\exclusions.json.
+/// UI-side view of the exclusion list. The engine owns the list (it applies exclusions before
+/// anything is persisted); this wrapper keeps the old Add/Remove API the forms use and pushes
+/// every change back through the backend.
 /// </summary>
-internal class ExclusionStore
+internal sealed class ExclusionStore
 {
-    private static readonly string ExclusionsPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "AppSentry", "exclusions.json");
+    private readonly IMonitorBackend _backend;
+    private List<ExclusionEntry> _entries;
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    private ExclusionStore(IMonitorBackend backend, List<ExclusionEntry> entries)
     {
-        WriteIndented = true,
-        Converters = { new JsonStringEnumConverter() }
-    };
+        _backend = backend;
+        _entries = entries;
+    }
 
-    private List<ExclusionEntry> _entries = [];
+    public static async Task<ExclusionStore> LoadAsync(IMonitorBackend backend)
+    {
+        List<ExclusionEntry> entries;
+        try { entries = await backend.GetExclusionsAsync(); }
+        catch { entries = []; }
+        return new ExclusionStore(backend, entries);
+    }
 
     public IReadOnlyList<ExclusionEntry> Entries => _entries;
 
-    public ExclusionStore()
-    {
-        Load();
-    }
-
-    /// <summary>True if this app name should be completely excluded from the change log.</summary>
-    public bool IsExcludedFromLogging(string appName) =>
-        _entries.Any(e => e.ExcludeLogging &&
-            e.AppName.Equals(appName, StringComparison.OrdinalIgnoreCase));
-
-    /// <summary>True if this app name should be excluded from notifications (popup/sound).
-    /// Also returns true if excluded from logging (which implies no notifications).</summary>
-    public bool IsExcludedFromNotifications(string appName) =>
-        _entries.Any(e => (e.ExcludeNotifications || e.ExcludeLogging) &&
-            e.AppName.Equals(appName, StringComparison.OrdinalIgnoreCase));
-
-    /// <summary>Returns the exclusion entry for an app name, or null if not excluded.</summary>
     public ExclusionEntry? GetEntry(string appName) =>
-        _entries.FirstOrDefault(e =>
-            e.AppName.Equals(appName, StringComparison.OrdinalIgnoreCase));
+        _entries.FirstOrDefault(e => e.AppName.Equals(appName, StringComparison.OrdinalIgnoreCase));
 
     public void Add(ExclusionEntry entry)
     {
-        // Remove existing entry for same app name before adding
-        _entries.RemoveAll(e =>
-            e.AppName.Equals(entry.AppName, StringComparison.OrdinalIgnoreCase));
-        _entries.Add(entry);
-        _entries.Sort((a, b) => string.Compare(a.AppName, b.AppName, StringComparison.OrdinalIgnoreCase));
-        Save();
+        var next = _entries
+            .Where(e => !e.AppName.Equals(entry.AppName, StringComparison.OrdinalIgnoreCase))
+            .Append(entry)
+            .OrderBy(e => e.AppName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        Save(next);
     }
 
-    public void Remove(string appName)
-    {
-        _entries.RemoveAll(e =>
-            e.AppName.Equals(appName, StringComparison.OrdinalIgnoreCase));
-        Save();
-    }
+    public void Remove(string appName) =>
+        Save(_entries.Where(e => !e.AppName.Equals(appName, StringComparison.OrdinalIgnoreCase)).ToList());
 
-    public void Update(ExclusionEntry entry)
-    {
-        Remove(entry.AppName);
-        Add(entry);
-    }
-
-    private void Load()
+    private void Save(List<ExclusionEntry> next)
     {
         try
         {
-            if (!File.Exists(ExclusionsPath)) return;
-            var json = File.ReadAllText(ExclusionsPath);
-            _entries = JsonSerializer.Deserialize<List<ExclusionEntry>>(json, JsonOptions) ?? [];
+            // Backends never capture the UI context, so blocking here can't deadlock.
+            _backend.SaveExclusionsAsync(next).GetAwaiter().GetResult();
+            _entries = next;
         }
-        catch { _entries = []; }
-    }
-
-    private void Save()
-    {
-        try
+        catch (Exception ex)
         {
-            var dir = Path.GetDirectoryName(ExclusionsPath)!;
-            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-            var json = JsonSerializer.Serialize(_entries, JsonOptions);
-            File.WriteAllText(ExclusionsPath, json);
+            MessageBox.Show($"Could not save exclusions: {ex.Message}", "Exclusions",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
-        catch { }
     }
 }

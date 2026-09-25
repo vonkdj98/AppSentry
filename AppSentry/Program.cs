@@ -1,3 +1,5 @@
+using AppSentry.Core.Backend;
+
 namespace AppSentry;
 
 internal static class Program
@@ -20,6 +22,7 @@ internal static class Program
         }
 
         ApplicationConfiguration.Initialize();
-        Application.Run(new MainForm());
+        var backend = new LocalBackend(LocalBackend.DefaultDataDir);
+        Application.Run(new MainForm(backend));
     }
 }

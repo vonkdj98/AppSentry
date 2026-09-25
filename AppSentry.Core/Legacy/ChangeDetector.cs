@@ -16,7 +16,7 @@ public static class ChangeDetector
         Dictionary<string, InstalledApp> current)
     {
         var events = new List<ChangeEvent>();
-        var now = DateTime.Now;
+        var now = DateTime.UtcNow;
 
         // Find new installs and updates
         foreach (var (key, currentApp) in current)
@@ -24,13 +24,13 @@ public static class ChangeDetector
             if (!previous.TryGetValue(key, out var prevApp))
             {
                 // New key — app was installed
-                events.Add(new ChangeEvent(currentApp, ChangeType.Installed, null, now));
+                events.Add(new ChangeEvent { App = currentApp, ChangeType = ChangeType.Installed, DetectedAt = now });
             }
             else if (!string.IsNullOrEmpty(currentApp.Version)
                      && currentApp.Version != prevApp.Version)
             {
                 // Same key, different version — app was updated
-                events.Add(new ChangeEvent(currentApp, ChangeType.Updated, prevApp.Version, now));
+                events.Add(new ChangeEvent { App = currentApp, ChangeType = ChangeType.Updated, PreviousVersion = prevApp.Version, PreviousApp = prevApp, DetectedAt = now });
             }
         }
 
@@ -39,7 +39,7 @@ public static class ChangeDetector
         {
             if (!current.ContainsKey(key))
             {
-                events.Add(new ChangeEvent(prevApp, ChangeType.Removed, null, now));
+                events.Add(new ChangeEvent { App = prevApp, ChangeType = ChangeType.Removed, DetectedAt = now });
             }
         }
 

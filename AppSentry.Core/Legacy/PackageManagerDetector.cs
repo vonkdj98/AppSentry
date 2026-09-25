@@ -217,48 +217,11 @@ internal class PackageManagerDetector
 
     // ── Helpers ────────────────────────────────────────────────────────────────
 
-    private static bool CommandExists(string command, string args)
-    {
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = command,
-                Arguments = args,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-            using var proc = Process.Start(psi);
-            if (proc == null) return false;
-            proc.WaitForExit(5000);
-            return proc.ExitCode == 0;
-        }
-        catch { return false; }
-    }
+    private static bool CommandExists(string command, string args) =>
+        AppSentry.Core.Util.ProcessRunner.Run(command, args, TimeSpan.FromSeconds(10)).Succeeded;
 
-    private static string RunCommand(string command, string args)
-    {
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = command,
-                Arguments = args,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-            using var proc = Process.Start(psi);
-            if (proc == null) return "";
-            var output = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit(15000);
-            return output;
-        }
-        catch { return ""; }
-    }
+    private static string RunCommand(string command, string args) =>
+        AppSentry.Core.Util.ProcessRunner.Run(command, args, TimeSpan.FromSeconds(30), System.Text.Encoding.UTF8).StdOut;
 
     private static string SafeSubstring(string s, int start, int length)
     {
