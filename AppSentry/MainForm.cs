@@ -1,6 +1,7 @@
 using System.Media;
 using System.Runtime.InteropServices;
 using AppSentry.Core.Backend;
+using AppSentry.Core.Service;
 using AppSentry.Core.Util;
 using AppSentry.Models;
 using Microsoft.Win32;
@@ -42,6 +43,7 @@ public partial class MainForm : Form
     private Button _btnCompare = null!;
     private Button _btnInstalledApps = null!;
     private Button _btnExclusions = null!;
+    private Button _btnService = null!;
     private ComboBox _cmbNotifyHide = null!;
     private Label _lblNotifyHide = null!;
     private ContextMenuStrip _listContextMenu = null!;
@@ -79,6 +81,7 @@ public partial class MainForm : Form
             await _backend.StartAsync();
             _exclusionStore = await ExclusionStore.LoadAsync(_backend);
             ApplySettingsToControls(await _backend.GetSettingsAsync());
+            ApplyPermissions();
             await LoadHistoryAsync();
             OnStatusChanged(_backend.Status);
         }
@@ -200,7 +203,7 @@ public partial class MainForm : Form
             ApplyThemeRecursive(c);
 
         // Buttons
-        foreach (var btn in new[] { _btnScanNow, _btnClearHistory, _btnExportCsv, _btnCompare, _btnInstalledApps, _btnExclusions })
+        foreach (var btn in new[] { _btnScanNow, _btnClearHistory, _btnExportCsv, _btnCompare, _btnInstalledApps, _btnExclusions, _btnService })
         {
             btn.BackColor = _theme.ButtonBg;
             btn.ForeColor = _theme.ButtonFg;
@@ -474,6 +477,11 @@ public partial class MainForm : Form
         _btnInstalledApps = MakeToolButton("📦 Installed Apps", "Browse all currently installed programs");
         _btnInstalledApps.Click += OnInstalledAppsClick;
 
+        _btnService = _backend.Mode == "Service"
+            ? MakeToolButton("🛡 Service", "Connected to the AppSentry background service")
+            : MakeToolButton("🛡 Install Service", "Run AppSentry as a background service for every user");
+        _btnService.Click += OnServiceClick;
+
         _btnExclusions = MakeToolButton("🚫 Exclusions", "Manage apps excluded from notifications or logging");
         _btnExclusions.Click += (_, _) =>
         {
@@ -525,7 +533,7 @@ public partial class MainForm : Form
             Margin = Padding.Empty
         };
         flow.Controls.AddRange([
-            _btnScanNow, _btnClearHistory, _btnExportCsv, _btnCompare, _btnInstalledApps, _btnExclusions,
+            _btnScanNow, _btnClearHistory, _btnExportCsv, _btnCompare, _btnInstalledApps, _btnExclusions, _btnService,
             MakeSpacer(12),
             _lblInterval, _cmbInterval,
             _lblSearch, _txtSearch,
@@ -813,13 +821,7 @@ public partial class MainForm : Form
         }
         else if (ev != null)
         {
-            rowBg = ev.ChangeType switch
-            {
-                ChangeType.Installed => _theme.InstalledBg,
-                ChangeType.Updated => _theme.UpdatedBg,
-                ChangeType.Removed => _theme.RemovedBg,
-                _ => (e.ItemIndex % 2 == 0) ? _theme.ListBg : _theme.AltRowBg
-            };
+            rowBg = EventDisplay.RowBackground(ev.ChangeType, _theme);
         }
         else
         {
@@ -840,13 +842,7 @@ public partial class MainForm : Form
         // Special color for Change column
         if (e.ColumnIndex == 3 && ev != null && !e.Item.Selected)
         {
-            textColor = ev.ChangeType switch
-            {
-                ChangeType.Installed => _theme.InstalledAccent,
-                ChangeType.Updated => _theme.UpdatedAccent,
-                ChangeType.Removed => _theme.RemovedAccent,
-                _ => textColor
-            };
+            textColor = EventDisplay.Accent(ev.ChangeType, _theme);
         }
 
         // Draw text
@@ -931,6 +927,67 @@ public partial class MainForm : Form
         {
             SetStatus($"Could not start a scan: {ex.Message}");
         }
+    }
+
+    /// <summary>Standard users connected to the service can look but not change history, exclusions or settings.</summary>
+    private void ApplyPermissions()
+    {
+        if (_backend.CanModify) return;
+        const string why = "Requires an administrator account (the service is shared by every user)";
+        foreach (Control c in new Control[] { _btnClearHistory, _btnExclusions, _cmbInterval })
+        {
+            c.Enabled = false;
+            _sharedToolTip.SetToolTip(c, why);
+        }
+    }
+
+    // ── Background service ───────────────────────────────────────────────────
+
+    private async void OnServiceClick(object? sender, EventArgs e)
+    {
+        if (_backend.Mode == "Service")
+        {
+            var role = _backend.CanModify ? "an administrator" : "a standard user (read-only)";
+            if (MessageBox.Show(
+                    $"Connected to the AppSentry service as {role}.\n\n" +
+                    $"History is kept in {ServiceDataDir.Path}, and every change is also written to the " +
+                    "Windows Application log (source \"AppSentry\", event IDs 1000–1004).\n\n" +
+                    "Uninstall the service? (History is kept.)",
+                    "AppSentry service", MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes)
+                return;
+            if (await Task.Run(() => ServiceInstaller.RunElevated("--uninstall-service")) == 0)
+                RestartApp();
+            return;
+        }
+
+        var prompt = ServiceInstaller.GetStatus() == null
+            ? "Install the AppSentry background service?\n\n" +
+              "• Monitors every user on this PC and keeps running when this window is closed or nobody is signed in\n" +
+              "• Writes every change to the Windows event log (for Wazuh)\n" +
+              "• Copies AppSentry to Program Files — Windows will ask for administrator approval"
+            : "The AppSentry service is installed, but this window couldn't reach it (it may be stopped).\n\nReinstall and start it?";
+        if (MessageBox.Show(prompt, "AppSentry service", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+            return;
+
+        _btnService.Enabled = false;
+        SetStatus("Installing the AppSentry service…");
+        var code = await Task.Run(() => ServiceInstaller.RunElevated("--install-service"));
+        _btnService.Enabled = true;
+
+        if (code == 1223) { SetStatus("Service install cancelled."); return; }
+        if (code != 0) { SetStatus($"Service install failed (exit code {code}); see the message for details."); return; }
+        if (MessageBox.Show("The service is running. Restart AppSentry now to switch this window over to it?",
+                "AppSentry service", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+            RestartApp();
+    }
+
+    private void RestartApp()
+    {
+        var exe = Environment.ProcessPath;
+        if (exe == null) return;
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe, $"--after-exit {Environment.ProcessId}") { UseShellExecute = true });
+        _trayIcon.Visible = false;
+        Application.Exit();
     }
 
     private void OnEventsDetected(IReadOnlyList<ChangeEvent> events)
@@ -1197,13 +1254,7 @@ public partial class MainForm : Form
             // Color the change type
             if (label == "Change Type")
             {
-                txtValue.ForeColor = ev.ChangeType switch
-                {
-                    ChangeType.Installed => _theme.InstalledAccent,
-                    ChangeType.Updated => _theme.UpdatedAccent,
-                    ChangeType.Removed => _theme.RemovedAccent,
-                    _ => _theme.FormFg
-                };
+                txtValue.ForeColor = EventDisplay.Accent(ev.ChangeType, _theme);
                 txtValue.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
             }
 
@@ -1455,9 +1506,9 @@ internal class ThemeColors
     // Selection
     public Color SelectedBg, SelectedFg;
     // Change type backgrounds
-    public Color InstalledBg, UpdatedBg, RemovedBg;
+    public Color InstalledBg, UpdatedBg, RemovedBg, ModifiedBg;
     // Change type text accents
-    public Color InstalledAccent, UpdatedAccent, RemovedAccent;
+    public Color InstalledAccent, UpdatedAccent, RemovedAccent, ModifiedAccent;
     // Input
     public Color InputBg, InputFg;
     // Buttons
@@ -1483,9 +1534,11 @@ internal class ThemeColors
         InstalledBg = Color.FromArgb(22, 42, 28),
         UpdatedBg = Color.FromArgb(22, 32, 52),
         RemovedBg = Color.FromArgb(45, 28, 28),
+        ModifiedBg = Color.FromArgb(48, 40, 20),
         InstalledAccent = Color.FromArgb(80, 200, 120),
         UpdatedAccent = Color.FromArgb(100, 160, 255),
         RemovedAccent = Color.FromArgb(220, 100, 100),
+        ModifiedAccent = Color.FromArgb(230, 180, 70),
         InputBg = Color.FromArgb(40, 40, 48),
         InputFg = Color.FromArgb(210, 212, 218),
         ButtonBg = Color.FromArgb(48, 48, 58),
@@ -1514,9 +1567,11 @@ internal class ThemeColors
         InstalledBg = Color.FromArgb(232, 250, 235),
         UpdatedBg = Color.FromArgb(232, 240, 255),
         RemovedBg = Color.FromArgb(252, 235, 235),
+        ModifiedBg = Color.FromArgb(255, 246, 224),
         InstalledAccent = Color.FromArgb(30, 140, 60),
         UpdatedAccent = Color.FromArgb(40, 100, 210),
         RemovedAccent = Color.FromArgb(200, 50, 50),
+        ModifiedAccent = Color.FromArgb(176, 110, 0),
         InputBg = Color.White,
         InputFg = Color.FromArgb(30, 30, 40),
         ButtonBg = Color.White,

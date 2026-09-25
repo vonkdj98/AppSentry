@@ -180,7 +180,9 @@ public static partial class StoreSource
             "microsoft.windows.pinningconfirmationdialog", "microsoft.windows.secureassessmentbrowser",
             "microsoft.windows.search", "microsoft.windows.appresolverux", "microsoft.windows.assignedaccesslockapp",
             "microsoft.windows.startmenuexperiencehost", "microsoft.windows.shellexperiencehost",
-            "windows.cbspreview", "windows.immersivecontrolpanel", "windows.printdialog", "inputapp", "narratorquickstart"
+            "windows.cbspreview", "windows.immersivecontrolpanel", "windows.printdialog", "inputapp", "narratorquickstart",
+            // winget's package index: updates several times a day and was 79% of one v1 history (6,375 of 8,095 events)
+            "microsoft.winget.source"
         ];
         return prefixes.Any(lower.StartsWith);
     }
