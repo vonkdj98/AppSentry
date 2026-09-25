@@ -1,22 +1,35 @@
+using AppSentry.Core.Detection;
+using AppSentry.Core.Sources;
 using AppSentry.Core.Storage;
+using AppSentry.Core.Util;
 using AppSentry.Models;
 
 namespace AppSentry.Core.Engine;
 
-// Phase 1: the scan pipeline still drives the v1 scanners (moved to Core/Legacy) so this
-// commit changes storage, scheduling and exclusions without changing detection yet.
+// Scan pipeline. Inventory (registry + Store) and diffing are the v2 implementation;
+// event log, folders, services/tasks and package-manager labels still use the v1
+// scanners in Core/Legacy until phase 3.
 public sealed partial class MonitorEngine
 {
     private readonly PackageManagerDetector _legacyPkg = new();
     private readonly ServiceTaskScanner _legacySvc = new();
     private EventLogMonitor? _legacyEventLog;
     private FileSystemMonitor? _legacyFs;
-    private Dictionary<string, InstalledApp>? _snapshot;
+
+    private Dictionary<string, InstalledApp> _snapshot = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _knownScopes = new(StringComparer.OrdinalIgnoreCase);
+    private string? _lastSnapshotJson;
 
     private void LoadSourceState()
     {
-        var saved = Store.GetState<Dictionary<string, InstalledApp>>(StateKeys.Snapshot);
-        _snapshot = saved == null ? null : new Dictionary<string, InstalledApp>(saved, StringComparer.OrdinalIgnoreCase);
+        var saved = Store.GetState<Dictionary<string, InstalledApp>>(StateKeys.Snapshot) ?? [];
+        // Entries without a scope come from a pre-v2 snapshot; drop them and re-baseline.
+        _snapshot = saved.Where(kv => !string.IsNullOrEmpty(kv.Value.Scope))
+            .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
+        _knownScopes = _snapshot.Count == saved.Count
+            ? new HashSet<string>(Store.GetState<List<string>>(StateKeys.KnownScopes) ?? [], StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         _legacyEventLog = new EventLogMonitor();
         _legacyFs = new FileSystemMonitor();
         _legacySvc.Initialize();
@@ -24,22 +37,30 @@ public sealed partial class MonitorEngine
 
     partial void OnStopping() => _legacyFs?.Dispose();
 
-    private List<InstalledApp> CurrentInventory() => _snapshot?.Values.ToList() ?? [];
+    private List<InstalledApp> CurrentInventory() => _snapshot.Values.ToList();
 
     private void ScanOnce(string reason)
     {
         var started = DateTime.UtcNow;
         PublishStatus(s => s with { IsScanning = true, LastError = null });
 
+        // ── 1. Inventory ──────────────────────────────────────────────────────
+        var inventory = new InventoryResult();
+        RunSource("Registry", inventory.Health, () => RegistrySource.Scan(Context, inventory));
+        RunSource("Store", inventory.Health, () => StoreSource.Scan(Context, inventory));
+
         _legacyPkg.Refresh();
-        var current = RegistryScanner.Scan()
-            .ToDictionary(kv => kv.Key,
-                kv => kv.Value with { PackageManager = _legacyPkg.Detect(kv.Value.Name, kv.Value.Version, kv.Value.InstallLocation) },
-                StringComparer.OrdinalIgnoreCase);
+        foreach (var app in inventory.Apps.Values.ToList())
+        {
+            var label = _legacyPkg.Detect(app.Name, app.Version, app.InstallLocation);
+            if (label.Length > 0) inventory.Add(app with { PackageManager = label });
+        }
 
-        var baseline = _snapshot == null;
-        List<ChangeEvent> events = baseline ? [] : ChangeDetector.Detect(_snapshot!, current);
+        // ── 2. Diff ───────────────────────────────────────────────────────────
+        var diff = ChangeDetector.Detect(_snapshot, _knownScopes, inventory, started);
+        var events = diff.Events;
 
+        // ── 3. Supplementary sources (v1) ────────────────────────────────────
         foreach (var evtLog in _legacyEventLog!.CheckForNewEvents())
         {
             if (events.Any(e => e.App.Name.Equals(evtLog.ProductName, StringComparison.OrdinalIgnoreCase)))
@@ -70,7 +91,7 @@ public sealed partial class MonitorEngine
 
         foreach (var fc in _legacyFs!.GetChangesAndResync())
         {
-            if (current.Values.Any(a =>
+            if (diff.Snapshot.Values.Any(a =>
                     a.InstallLocation.Contains(fc.FolderName, StringComparison.OrdinalIgnoreCase) ||
                     a.Name.Equals(fc.FolderName, StringComparison.OrdinalIgnoreCase)))
                 continue;
@@ -81,7 +102,6 @@ public sealed partial class MonitorEngine
                     KeyPath = $"FILESYSTEM\\{fc.FolderPath}",
                     Name = fc.FolderName,
                     InstallLocation = fc.FolderPath,
-                    InstalledBy = "Unknown",
                     InstallSource = $"File drop in {Path.GetDirectoryName(fc.FolderPath)}",
                     InstallType = "Portable/Unknown"
                 },
@@ -100,7 +120,6 @@ public sealed partial class MonitorEngine
                 {
                     KeyPath = $"{sc.ItemType.ToString().ToUpperInvariant()}\\{sc.Name}",
                     Name = $"[{typeLabel}] {sc.Name}",
-                    InstalledBy = "SYSTEM/Admin",
                     InstallSource = sc.Details,
                     InstallType = typeLabel
                 },
@@ -110,16 +129,44 @@ public sealed partial class MonitorEngine
             });
         }
 
-        CommitScan(events, new Dictionary<string, object?> { [StateKeys.Snapshot] = current });
-        _snapshot = current;
+        // ── 4. Persist ────────────────────────────────────────────────────────
+        var state = new Dictionary<string, object?>();
+        var snapshotJson = AppJson.Serialize(diff.Snapshot);
+        if (snapshotJson != _lastSnapshotJson) state[StateKeys.Snapshot] = snapshotJson;
+        if (!diff.KnownScopes.SetEquals(_knownScopes)) state[StateKeys.KnownScopes] = diff.KnownScopes.OrderBy(s => s).ToList();
+
+        CommitScan(events, state);
+
+        _snapshot = diff.Snapshot;
+        _knownScopes = diff.KnownScopes;
+        _lastSnapshotJson = snapshotJson;
+
+        var firstBaseline = diff.BaselinedScopes.Count > 0 && diff.BaselinedScopes.Count == diff.KnownScopes.Count;
+        if (diff.BaselinedScopes.Count > 0)
+            EngineLog.Info($"Baselined scope(s): {string.Join(", ", diff.BaselinedScopes)}");
 
         PublishStatus(s => s with
         {
             IsScanning = false,
             LastScanUtc = DateTime.UtcNow,
             LastScanSeconds = (DateTime.UtcNow - started).TotalSeconds,
-            TrackedApps = current.Count,
-            Notice = baseline ? "Baseline taken — changes are reported from now on" : s.Notice
+            TrackedApps = diff.Snapshot.Count,
+            Sources = new Dictionary<string, string>(inventory.Health),
+            Notice = firstBaseline ? "Baseline taken — changes are reported from now on" : s.Notice
         });
+    }
+
+    /// <summary>Runs one source; an exception marks it failed without aborting the scan.</summary>
+    private static void RunSource(string name, Dictionary<string, string> health, Action scan)
+    {
+        try
+        {
+            scan();
+        }
+        catch (Exception ex)
+        {
+            health[name] = $"failed: {ex.Message}";
+            EngineLog.Error($"{name} source failed", ex);
+        }
     }
 }

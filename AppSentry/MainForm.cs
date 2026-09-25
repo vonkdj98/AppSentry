@@ -656,9 +656,9 @@ public partial class MainForm : Form
             menuUninstall.Enabled = hasSelection && ev != null &&
                 ev.ChangeType != ChangeType.Removed;
 
-            // Diff only for Updated events
+            // Diff for updates and modifications (both carry the previous values)
             menuViewDiff.Enabled = hasSelection && ev != null &&
-                ev.ChangeType == ChangeType.Updated;
+                ev.ChangeType is ChangeType.Updated or ChangeType.Modified;
 
             if (!hasSelection) e.Cancel = true;
         };
@@ -1281,7 +1281,7 @@ public partial class MainForm : Form
         footerPanel.Controls.Add(btnClose);
 
         // Add "View Diff" button for Updated events
-        if (ev.ChangeType == ChangeType.Updated)
+        if (ev.ChangeType is ChangeType.Updated or ChangeType.Modified)
         {
             var btnDiff = new Button
             {
