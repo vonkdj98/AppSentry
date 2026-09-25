@@ -672,49 +672,10 @@ public partial class MainForm : Form
 
     private void OnContextUninstall(object? sender, EventArgs e)
     {
-        var ev = GetSelectedEvent();
-        if (ev == null) return;
-
-        // Try to find the uninstall string from registry
-        var uninstallString = GetUninstallString(ev.App.KeyPath);
-        if (string.IsNullOrWhiteSpace(uninstallString))
-        {
-            MessageBox.Show($"No uninstall command found for {ev.App.Name}.\n\nYou can uninstall via Windows Settings > Apps.",
-                "Uninstall", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-
-        if (MessageBox.Show($"Uninstall {ev.App.Name} {ev.App.Version}?\n\nCommand: {uninstallString}",
-            "Confirm Uninstall", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
-            return;
-
-        try
-        {
-            var psi = new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = "cmd.exe",
-                Arguments = $"/c {uninstallString}",
-                UseShellExecute = true,
-                Verb = "runas" // request admin
-            };
-            System.Diagnostics.Process.Start(psi);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Failed to start uninstaller: {ex.Message}", "Error",
-                MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
+        var app = GetSelectedEvent()?.App;
+        if (app != null) UninstallAction.Run(this, app, SetStatus);
     }
 
-    private static string GetUninstallString(string keyPath)
-    {
-        try
-        {
-            using var key = RegistryPaths.OpenReadOnly(keyPath);
-            return key?.GetValue("UninstallString") as string ?? "";
-        }
-        catch { return ""; }
-    }
 
     private void OnContextOpenLocation(object? sender, EventArgs e)
     {
