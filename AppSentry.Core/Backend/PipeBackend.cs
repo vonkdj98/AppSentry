@@ -75,8 +75,10 @@ public sealed class PipeBackend : IMonitorBackend
         SetStatus(hello.Status);
     }
 
-    public async Task<List<ChangeEvent>> GetHistoryAsync() =>
-        await RequestAsync<List<ChangeEvent>>(PipeProtocol.Ops.History).ConfigureAwait(false) ?? [];
+    public async Task<HistoryPage> GetHistoryPageAsync(HistoryQuery query) =>
+        await RequestAsync<HistoryPage>(PipeProtocol.Ops.HistoryPage, query).ConfigureAwait(false) ?? new HistoryPage();
+
+    public Task<ChangeEvent?> GetEventAsync(long id) => RequestAsync<ChangeEvent>(PipeProtocol.Ops.Event, id);
 
     public async Task<List<InstalledApp>> GetInventoryAsync() =>
         await RequestAsync<List<InstalledApp>>(PipeProtocol.Ops.Inventory).ConfigureAwait(false) ?? [];

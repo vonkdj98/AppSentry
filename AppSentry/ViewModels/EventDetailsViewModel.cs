@@ -32,6 +32,9 @@ public sealed class EventDetailsViewModel : ObservableObject
         SubtitleLine = string.Join(" · ", new[] { app.Publisher, kind }
             .Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.OrdinalIgnoreCase));
         AllDiffRows = EventActions.Diff(ev);
+        // History pages leave out app events' raw values; fetch the full event for the diff.
+        if (ev.Id != 0 && ev.PreviousApp is { RawValues: null } && app.RawValues == null)
+            _ = LoadFullEventAsync(ev.Id);
 
         var raw = app.RawValues ?? [];
         var facts = new List<Fact>
@@ -131,7 +134,21 @@ public sealed class EventDetailsViewModel : ObservableObject
 
     // ── Diff ──────────────────────────────────────────────────────────────────
 
-    public IReadOnlyList<DiffRow> AllDiffRows { get; }
+    public IReadOnlyList<DiffRow> AllDiffRows { get; private set; }
+
+    private async Task LoadFullEventAsync(long id)
+    {
+        try
+        {
+            if (await _shell.Backend.GetEventAsync(id) is not { } full) return;
+            AllDiffRows = EventActions.Diff(full);
+            OnPropertiesChanged(nameof(AllDiffRows), nameof(HasDiff), nameof(UnchangedCount), nameof(DiffRows), nameof(ShowUnchangedLabel));
+        }
+        catch (Exception)
+        {
+            // The summary diff (version change) is still shown.
+        }
+    }
 
     public bool HasDiff => AllDiffRows.Count > 0;
 

@@ -55,6 +55,48 @@ public sealed class SqliteStore
         QueryEvents("SELECT id, json FROM events WHERE detected_at >= $since ORDER BY detected_at DESC, id DESC",
             cmd => cmd.Parameters.AddWithValue("$since", ToKey(utc)));
 
+    /// <summary>One page of events by id, newest first. <paramref name="hasMore"/> says whether older ones remain.</summary>
+    public List<ChangeEvent> LoadEventsPage(long? beforeId, int limit, out bool hasMore)
+    {
+        limit = Math.Clamp(limit, 1, 20_000);
+        var rows = QueryEvents(
+            beforeId is null
+                ? "SELECT id, json FROM events ORDER BY id DESC LIMIT $limit"
+                : "SELECT id, json FROM events WHERE id < $before ORDER BY id DESC LIMIT $limit",
+            cmd =>
+            {
+                cmd.Parameters.AddWithValue("$limit", limit + 1);
+                if (beforeId is { } before) cmd.Parameters.AddWithValue("$before", before);
+            });
+        hasMore = rows.Count > limit;
+        if (hasMore) rows.RemoveAt(rows.Count - 1);
+        return rows;
+    }
+
+    public ChangeEvent? LoadEvent(long id) =>
+        QueryEvents("SELECT id, json FROM events WHERE id = $id", cmd => cmd.Parameters.AddWithValue("$id", id)).FirstOrDefault();
+
+    /// <summary>Deletes events detected before <paramref name="utc"/>; compacts the file after a big purge.</summary>
+    public int DeleteEventsBefore(DateTime utc)
+    {
+        int deleted;
+        using (var conn = Open())
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "DELETE FROM events WHERE detected_at < $before";
+            cmd.Parameters.AddWithValue("$before", ToKey(utc));
+            deleted = cmd.ExecuteNonQuery();
+        }
+        if (deleted > 500)
+        {
+            using var conn = Open();
+            using var vacuum = conn.CreateCommand();
+            vacuum.CommandText = "VACUUM";
+            vacuum.ExecuteNonQuery();
+        }
+        return deleted;
+    }
+
     public int CountEvents()
     {
         using var conn = Open();

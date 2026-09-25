@@ -23,22 +23,32 @@ public sealed class DemoBackend : IMonitorBackend
     private EngineSettings _settings = new() { ScanIntervalMinutes = 30, RealtimeEnabled = true };
     private EngineStatus _status;
 
-    public DemoBackend()
+    /// <param name="synthetic">true: entirely made-up apps, services and tasks (safe for public screenshots).</param>
+    public DemoBackend(bool synthetic = false)
     {
-        var context = EngineContext.Capture(EngineMode.User);
-        var inventory = new InventoryResult();
-        try { RegistrySource.Scan(context, inventory); } catch { }
-        try { StoreSource.Scan(context, inventory); } catch { }
-        _inventory = inventory.Apps.Values.ToList();
-
-        var health = new Dictionary<string, string>();
-        var services = ServiceSource.Scan(null, context, DateTime.UtcNow, health).Next;
-        var tasks = TaskSource.Scan(null, context, DateTime.UtcNow, health).Next;
-        _persistence = new PersistenceInventory
+        if (synthetic)
         {
-            Services = services.Services.Values.OrderBy(s => s.DisplayName).ToList(),
-            Tasks = tasks.Tasks.Values.OrderBy(t => t.Path).ToList()
-        };
+            _inventory = SyntheticData.Inventory();
+            _persistence = SyntheticData.Persistence();
+            _exclusions = [new("Winget Source", true, false), new("Microsoft Edge Update*", true, true)];
+        }
+        else
+        {
+            var context = EngineContext.Capture(EngineMode.User);
+            var inventory = new InventoryResult();
+            try { RegistrySource.Scan(context, inventory); } catch { }
+            try { StoreSource.Scan(context, inventory); } catch { }
+            _inventory = inventory.Apps.Values.ToList();
+
+            var health = new Dictionary<string, string>();
+            var services = ServiceSource.Scan(null, context, DateTime.UtcNow, health).Next;
+            var tasks = TaskSource.Scan(null, context, DateTime.UtcNow, health).Next;
+            _persistence = new PersistenceInventory
+            {
+                Services = services.Services.Values.OrderBy(s => s.DisplayName).ToList(),
+                Tasks = tasks.Tasks.Values.OrderBy(t => t.Path).ToList()
+            };
+        }
 
         _events = BuildEvents();
         _status = new EngineStatus
@@ -63,7 +73,14 @@ public sealed class DemoBackend : IMonitorBackend
     public event EventHandler<EngineStatus>? StatusChanged;
 
     public Task StartAsync() => Task.CompletedTask;
-    public Task<List<ChangeEvent>> GetHistoryAsync() => Task.FromResult(_events.ToList());
+    public Task<HistoryPage> GetHistoryPageAsync(HistoryQuery query)
+    {
+        var ordered = _events.OrderByDescending(e => e.Id).Where(e => query.BeforeId is not { } before || e.Id < before).ToList();
+        var page = ordered.Take(query.Limit).ToList();
+        return Task.FromResult(new HistoryPage { Events = page, HasMore = ordered.Count > page.Count, TotalCount = _events.Count });
+    }
+
+    public Task<ChangeEvent?> GetEventAsync(long id) => Task.FromResult(_events.FirstOrDefault(e => e.Id == id));
     public Task<List<InstalledApp>> GetInventoryAsync() => Task.FromResult(_inventory.ToList());
     public Task<PersistenceInventory> GetPersistenceAsync() => Task.FromResult(_persistence);
     public Task<List<ExclusionEntry>> GetExclusionsAsync() => Task.FromResult(_exclusions.ToList());
@@ -101,13 +118,15 @@ public sealed class DemoBackend : IMonitorBackend
             .ToList();
         var store = _inventory.Where(a => a.PackageFullName.Length > 0).OrderBy(a => a.Name).ToList();
         InstalledApp Pick(int i) => real.Count > 0 ? real[i % real.Count] : new InstalledApp { Name = $"Sample App {i}", Version = "1.0", Scope = Scopes.Machine64 };
+        InstalledApp Named(string prefix, int fallback) =>
+            real.FirstOrDefault(a => a.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) ?? Pick(fallback);
 
         var events = new List<ChangeEvent>();
         long id = 1000;
         void Add(ChangeEvent ev) => events.Add(ev with { Id = ++id });
 
         // Today
-        var updated = Pick(0);
+        var updated = Named("7-Zip", 0);
         Add(new ChangeEvent
         {
             App = updated with { InstalledBy = @"CONTOSO\alex" },
@@ -125,7 +144,7 @@ public sealed class DemoBackend : IMonitorBackend
             before: @"""C:\Program Files\Contoso\Agent\agent.exe"" -service",
             after: @"""C:\Users\Public\Libraries\agent.exe"" -service",
             details: @"ImagePath: ""C:\Program Files\Contoso\Agent\agent.exe"" → ""C:\Users\Public\Libraries\agent.exe"""));
-        var installed = Pick(3);
+        var installed = Named("Zoom", 3);
         Add(new ChangeEvent
         {
             App = installed with { InstalledBy = @"NT AUTHORITY\SYSTEM" },
@@ -151,7 +170,7 @@ public sealed class DemoBackend : IMonitorBackend
         });
 
         // Yesterday
-        foreach (var (app, hours) in new[] { (Pick(5), 20), (Pick(8), 22) })
+        foreach (var (app, hours) in new[] { (Named("Google Chrome", 5), 20), (Named("Mozilla Firefox", 8), 22) })
         {
             Add(new ChangeEvent
             {
@@ -175,7 +194,7 @@ public sealed class DemoBackend : IMonitorBackend
             Details = @"MSI event 1034 by CONTOSO\sam"
         });
         Add(Service("Contoso Filter Driver", "cfltr", ChangeType.Installed, now.AddHours(-27), after: @"\SystemRoot\System32\drivers\cfltr.sys", driver: true));
-        var removed = Pick(11);
+        var removed = Named("VLC", 11);
         Add(new ChangeEvent { App = removed, ChangeType = ChangeType.Removed, DetectedAt = now.AddHours(-30), Source = DetectionSource.Registry });
 
         // Earlier this week
@@ -192,7 +211,7 @@ public sealed class DemoBackend : IMonitorBackend
             Source = DetectionSource.FileSystem,
             Details = "New folder with no matching Add/Remove Programs entry"
         });
-        var later = Pick(14);
+        var later = Named("Wireshark", 14);
         Add(new ChangeEvent { App = later, ChangeType = ChangeType.Installed, DetectedAt = now.AddDays(-4), OccurredAt = now.AddDays(-4), Source = DetectionSource.Registry, ChangedBy = @"CONTOSO\alex" });
 
         return events.OrderByDescending(e => e.DetectedAt).ToList();

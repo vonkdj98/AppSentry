@@ -65,7 +65,7 @@ public class PipeTests(ITestOutputHelper output)
             Assert.Equal(ChangeType.Installed, ev.ChangeType);
             if (client.CanModify) Assert.True(ev.Silent); // the exclusion set over the pipe applied
 
-            var history = await client.GetHistoryAsync();
+            var history = (await client.GetHistoryPageAsync(new HistoryQuery { Limit = 500 })).Events;
             Assert.Contains(history, e => e.Id == ev.Id);
         }
         finally

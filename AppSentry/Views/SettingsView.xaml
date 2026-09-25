@@ -130,6 +130,16 @@
             <TextBlock Text="Data" Style="{StaticResource SectionHeader}" />
             <Border Style="{StaticResource Card}">
                 <StackPanel>
+                    <Grid IsEnabled="{Binding CanModify}">
+                        <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,24,0">
+                            <TextBlock Text="Keep history" Style="{StaticResource RowLabel}" />
+                            <TextBlock Text="Older changes are deleted once a day. Keep everything never deletes anything." Style="{StaticResource RowHint}" />
+                        </StackPanel>
+                        <ComboBox Grid.Column="1" ItemsSource="{Binding RetentionOptions}" SelectedItem="{Binding SelectedRetention}" Width="200" VerticalAlignment="Center"
+                                  AutomationProperties.Name="Keep history" />
+                    </Grid>
+                    <Border Style="{StaticResource Divider}" />
                     <TextBlock Style="{StaticResource RowHint}" Margin="0,0,0,10">
                         <Run Text="History is stored in " /><Run Text="{Binding DataDir, Mode=OneWay}" /><Run Text=". " /><Run Text="{Binding DataDirNote, Mode=OneWay}" />
                     </TextBlock>

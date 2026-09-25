@@ -21,7 +21,8 @@ public static class EventActions
     {
         var rows = new List<DiffRow>();
         var before = ev.PreviousApp;
-        if (before == null)
+        // No previous record (v1 events), or a slim copy still waiting for its full values.
+        if (before == null || (before.RawValues == null && ev.App.RawValues == null))
         {
             if (!string.IsNullOrEmpty(ev.PreviousVersion))
                 rows.Add(new DiffRow("DisplayVersion", ev.PreviousVersion, ev.App.Version, DiffKind.Changed));

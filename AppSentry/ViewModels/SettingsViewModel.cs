@@ -33,6 +33,15 @@ public sealed class SettingsViewModel : ObservableObject, IPage
             new("Off (real-time only)", 0)
         ];
         ThemeOptions = ["System", "Light", "Dark"];
+        RetentionOptions =
+        [
+            new("Keep everything", 0),
+            new("2 years", 730),
+            new("1 year", 365),
+            new("6 months", 182),
+            new("3 months", 91),
+            new("1 month", 30)
+        ];
 
         ServiceCommand = new AsyncCommand(ServiceActionAsync);
         ResumeCommand = new RelayCommand(() => _shell.PauseNotifications(null));
@@ -49,7 +58,7 @@ public sealed class SettingsViewModel : ObservableObject, IPage
     {
         _engine = await _shell.Backend.GetSettingsAsync();
         _loaded = true;
-        OnPropertiesChanged(nameof(RealtimeEnabled), nameof(SelectedInterval), nameof(CanModify));
+        OnPropertiesChanged(nameof(RealtimeEnabled), nameof(SelectedInterval), nameof(SelectedRetention), nameof(CanModify));
         _shell.OnRealtimeChanged();
     }
 
@@ -79,6 +88,39 @@ public sealed class SettingsViewModel : ObservableObject, IPage
         }
     }
 
+    // ── History retention (engine) ───────────────────────────────────────────
+
+    public IReadOnlyList<Option<int>> RetentionOptions { get; }
+
+    public Option<int> SelectedRetention
+    {
+        get => RetentionOptions.FirstOrDefault(o => o.Value == _engine.RetentionDays)
+               ?? new Option<int>($"{_engine.RetentionDays} days", _engine.RetentionDays);
+        set
+        {
+            if (value == null || value.Value == _engine.RetentionDays) return;
+            _ = ChangeRetentionAsync(value);
+        }
+    }
+
+    private async Task ChangeRetentionAsync(Option<int> option)
+    {
+        if (option.Value > 0)
+        {
+            var cutoff = DateTime.UtcNow.AddDays(-option.Value);
+            var doomed = _shell.AllEvents.Count(e => e.DetectedAt < cutoff);
+            if (doomed > 0 && !Dialogs.Confirm("Keep history",
+                    $"Delete the {doomed:N0} changes older than {option.Label.ToLowerInvariant()}? This can't be undone.", destructive: true))
+            {
+                _ = Application.Current.Dispatcher.BeginInvoke(() => OnPropertyChanged(nameof(SelectedRetention))); // snap the combo back after the binding update finishes
+                return;
+            }
+        }
+        await SaveEngineAsync(_engine with { RetentionDays = option.Value });
+        OnPropertyChanged(nameof(SelectedRetention));
+        await _shell.ReloadHistoryAsync();
+    }
+
     private async Task SaveEngineAsync(EngineSettings next)
     {
         if (!_loaded) return;
@@ -94,7 +136,7 @@ public sealed class SettingsViewModel : ObservableObject, IPage
             _engine = previous;
             _shell.ShowMessage($"Couldn't save: {ex.Message}");
         }
-        OnPropertiesChanged(nameof(RealtimeEnabled), nameof(SelectedInterval));
+        OnPropertiesChanged(nameof(RealtimeEnabled), nameof(SelectedInterval), nameof(SelectedRetention));
     }
 
     // ── Mode and service ─────────────────────────────────────────────────────
