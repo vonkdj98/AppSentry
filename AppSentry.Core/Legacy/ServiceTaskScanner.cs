@@ -203,20 +203,7 @@ public class ServiceTaskScanner
         var tasks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "schtasks.exe",
-                Arguments = "/Query /FO CSV /NH",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                CreateNoWindow = true
-            };
-
-            using var proc = Process.Start(psi);
-            if (proc == null) return tasks;
-
-            var output = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit(10000);
+            var output = AppSentry.Core.Util.ProcessRunner.Run("schtasks.exe", "/Query /FO CSV /NH", TimeSpan.FromSeconds(30)).StdOut;
 
             foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
             {

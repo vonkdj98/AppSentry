@@ -1,5 +1,7 @@
 using System.Media;
 using System.Runtime.InteropServices;
+using AppSentry.Core.Backend;
+using AppSentry.Core.Util;
 using AppSentry.Models;
 using Microsoft.Win32;
 
@@ -7,17 +9,14 @@ namespace AppSentry;
 
 public partial class MainForm : Form
 {
-    private readonly SnapshotStore _store = new();
-    private Dictionary<string, InstalledApp> _lastSnapshot = [];
-    private System.Windows.Forms.Timer _scanTimer = null!;
+    // ── Engine connection ─────────────────────────────────────────────────
+    // All detection, scheduling and storage lives in AppSentry.Core behind this backend
+    // (in-process engine or the Windows service). The form only displays and forwards.
+    private readonly IMonitorBackend _backend;
+    private ExclusionStore _exclusionStore = null!;
     private List<ChangeEvent> _allEvents = [];
-
-    // ── Additional monitors ───────────────────────────────────────────────
-    private readonly EventLogMonitor _eventLogMonitor = new();
-    private readonly FileSystemMonitor _fileSystemMonitor = new();
-    private readonly ServiceTaskScanner _serviceTaskScanner = new();
-    private readonly PackageManagerDetector _pkgDetector = new();
-    private readonly ExclusionStore _exclusionStore = new();
+    private readonly HashSet<long> _knownEventIds = [];
+    private bool _applyingSettings;
 
     // ── Theme ────────────────────────────────────────────────────────────────
     private enum ThemeMode { System, Dark, Light }
@@ -56,19 +55,61 @@ public partial class MainForm : Form
     private int _sortColumn = -1;
     private bool _sortAscending = true;
 
-    public MainForm()
+    public MainForm(IMonitorBackend backend)
     {
+        _backend = backend;
         DetectTheme();
         LoadSoundPref();
         LoadNotifyHidePref();
-        LoadIntervalPref();
         InitializeComponent();
         SetupTrayIcon();
         BuildListContextMenu();
-        _serviceTaskScanner.Initialize();
-        LoadHistory();
-        PerformScan(isStartup: true);
-        StartTimer(_intervalIndex switch { 0 => 1, 1 => 5, 2 => 10, 3 => 30, _ => 0 });
+
+        // Subscribe before starting so the startup scan's events aren't missed.
+        _backend.EventsDetected += (_, events) => RunOnUi(() => OnEventsDetected(events));
+        _backend.StatusChanged += (_, status) => RunOnUi(() => OnStatusChanged(status));
+        Load += async (_, _) => await ConnectBackendAsync();
+    }
+
+    private async Task ConnectBackendAsync()
+    {
+        SetStatus($"Starting monitor ({_backend.Mode})…");
+        try
+        {
+            await _backend.StartAsync();
+            _exclusionStore = await ExclusionStore.LoadAsync(_backend);
+            ApplySettingsToControls(await _backend.GetSettingsAsync());
+            await LoadHistoryAsync();
+            OnStatusChanged(_backend.Status);
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Monitor failed to start: {ex.Message}");
+            MessageBox.Show($"AppSentry could not start its monitor:\n\n{ex.Message}", "AppSentry",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void RunOnUi(Action action)
+    {
+        if (_isClosing || IsDisposed) return;
+        try
+        {
+            if (IsHandleCreated) BeginInvoke(action);
+        }
+        catch (ObjectDisposedException) { }
+        catch (InvalidOperationException) { }
+    }
+
+    private static readonly int[] IntervalMinutes = [1, 5, 10, 30, 0];
+
+    private void ApplySettingsToControls(EngineSettings settings)
+    {
+        _applyingSettings = true;
+        var idx = Array.IndexOf(IntervalMinutes, settings.ScanIntervalMinutes);
+        _intervalIndex = idx >= 0 ? idx : 1;
+        _cmbInterval.SelectedIndex = _intervalIndex;
+        _applyingSettings = false;
     }
 
     // ── Theme Detection ──────────────────────────────────────────────────────
@@ -79,10 +120,9 @@ public partial class MainForm : Form
     private static readonly string SoundPrefPath = Path.Combine(AppDataDir, "sound.txt");
     private static readonly string ColumnLayoutPath = Path.Combine(AppDataDir, "columns.txt");
     private static readonly string NotifyHidePath = Path.Combine(AppDataDir, "notifyhide.txt");
-    private static readonly string IntervalPrefPath = Path.Combine(AppDataDir, "interval.txt");
     private bool _soundEnabled;
     private int _notifyAutoHideSeconds; // 0 = stay forever
-    private int _intervalIndex = 1; // default: 5 min (index into combo)
+    private int _intervalIndex = 1; // default: 5 min (index into combo); the engine owns the real setting
 
     [DllImport("winmm.dll")]
     private static extern bool PlaySound(string lpszName, nint hmod, uint fdwSound);
@@ -241,22 +281,6 @@ public partial class MainForm : Form
         catch { }
     }
 
-    private void LoadIntervalPref()
-    {
-        try
-        {
-            if (File.Exists(IntervalPrefPath) && int.TryParse(File.ReadAllText(IntervalPrefPath).Trim(), out var idx))
-                _intervalIndex = Math.Clamp(idx, 0, 4); // 0-4 = "1 min" through "Off"
-        }
-        catch { }
-    }
-
-    private void SaveIntervalPref()
-    {
-        try { File.WriteAllText(IntervalPrefPath, _intervalIndex.ToString()); }
-        catch { }
-    }
-
     // ── Column Layout Persistence ─────────────────────────────────────────────
 
     private void SaveColumnLayout()
@@ -340,7 +364,7 @@ public partial class MainForm : Form
         };
 
         _btnScanNow = MakeToolButton("⟳ Scan Now", "Scan registry for changes now");
-        _btnScanNow.Click += (_, _) => PerformScan(isStartup: false);
+        _btnScanNow.Click += (_, _) => RequestScan();
 
         _btnClearHistory = MakeToolButton("✕ Clear", "Remove all recorded events");
         _btnClearHistory.Click += OnClearHistory;
@@ -686,28 +710,7 @@ public partial class MainForm : Form
     {
         try
         {
-            // Parse keyPath like "HKLM\SOFTWARE\...\{guid}"
-            RegistryKey? hive = null;
-            string subPath;
-
-            if (keyPath.StartsWith("HKLM\\"))
-            {
-                hive = Registry.LocalMachine;
-                subPath = keyPath[5..];
-            }
-            else if (keyPath.StartsWith("HKCU\\"))
-            {
-                hive = Registry.CurrentUser;
-                subPath = keyPath[5..];
-            }
-            else if (keyPath.StartsWith("HKU\\"))
-            {
-                hive = Registry.Users;
-                subPath = keyPath[4..];
-            }
-            else return "";
-
-            using var key = hive.OpenSubKey(subPath, false);
+            using var key = RegistryPaths.OpenReadOnly(keyPath);
             return key?.GetValue("UninstallString") as string ?? "";
         }
         catch { return ""; }
@@ -904,7 +907,7 @@ public partial class MainForm : Form
             _trayMenu.Renderer = new DarkToolStripRenderer();
         }
         _trayMenu.Items.Add("Show AppSentry", null, (_, _) => RestoreFromTray());
-        _trayMenu.Items.Add("Scan Now", null, (_, _) => { RestoreFromTray(); PerformScan(false); });
+        _trayMenu.Items.Add("Scan Now", null, (_, _) => { RestoreFromTray(); RequestScan(); });
         _trayMenu.Items.Add("-");
         _trayMenu.Items.Add("Exit", null, (_, _) => { _trayIcon.Visible = false; Application.Exit(); });
 
@@ -941,195 +944,71 @@ public partial class MainForm : Form
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         _isClosing = true;
-        _scanTimer?.Stop();
-        _scanTimer?.Dispose();
         _sharedToolTip.Dispose();
-        _fileSystemMonitor.Dispose();
         _trayIcon.Visible = false;
         _trayIcon.Dispose();
         base.OnFormClosing(e);
     }
 
-    // ── Scanning ─────────────────────────────────────────────────────────────
-
-    private void PerformScan(bool isStartup)
+    protected override void OnFormClosed(FormClosedEventArgs e)
     {
-        SetStatus("Scanning registry, event log, services, file system…");
-        _btnScanNow.Enabled = false;
-
-        Task.Run(() =>
-        {
-            // 0. Refresh package manager cache
-            _pkgDetector.Refresh();
-
-            // 1. Registry scan (existing)
-            var current = RegistryScanner.Scan();
-            List<ChangeEvent> newEvents = [];
-
-            if (isStartup)
-            {
-                var saved = _store.LoadSnapshot();
-                if (saved != null)
-                {
-                    newEvents = ChangeDetector.Detect(saved, current);
-                    var toLog = newEvents.Where(e => !_exclusionStore.IsExcludedFromLogging(e.App.Name)).ToList();
-                    if (toLog.Count > 0)
-                        _store.AppendHistory(toLog);
-                }
-                _store.SaveSnapshot(current);
-                _lastSnapshot = current;
-            }
-            else
-            {
-                newEvents = ChangeDetector.Detect(_lastSnapshot, current);
-                var toLog = newEvents.Where(e => !_exclusionStore.IsExcludedFromLogging(e.App.Name)).ToList();
-                if (toLog.Count > 0)
-                    _store.AppendHistory(toLog);
-                _lastSnapshot = current;
-                _store.SaveSnapshot(current);
-            }
-
-            // 2. Event Log — catch silent/remote MSI installs
-            try
-            {
-                var eventLogChanges = _eventLogMonitor.CheckForNewEvents();
-                foreach (var evtLog in eventLogChanges)
-                {
-                    // Skip if registry scan already caught this app
-                    if (newEvents.Any(e => e.App.Name.Equals(evtLog.ProductName, StringComparison.OrdinalIgnoreCase)))
-                        continue;
-
-                    var changeType = evtLog.ChangeType switch
-                    {
-                        EventLogChangeType.Installed => ChangeType.Installed,
-                        EventLogChangeType.Updated => ChangeType.Updated,
-                        EventLogChangeType.Removed => ChangeType.Removed,
-                        _ => ChangeType.Installed
-                    };
-
-                    var app = new InstalledApp(
-                        KeyPath: $"EVENTLOG\\{evtLog.EventId}\\{evtLog.ProductName}",
-                        Name: evtLog.ProductName,
-                        Version: evtLog.Version,
-                        Publisher: "",
-                        InstallDate: evtLog.TimeGenerated.ToString("yyyyMMdd"),
-                        InstallLocation: "",
-                        InstalledBy: evtLog.UserName,
-                        InstallSource: $"Event Log (ID {evtLog.EventId})",
-                        InstallType: "MSI"
-                    );
-
-                    var ce = new ChangeEvent(app, changeType, null, evtLog.TimeGenerated, DetectionSource.EventLog);
-                    newEvents.Add(ce);
-                    _store.AppendHistory([ce]);
-                }
-            }
-            catch { }
-
-            // 3. File System — new folders in Program Files
-            try
-            {
-                var folderChanges = _fileSystemMonitor.GetChangesAndResync();
-                foreach (var fc in folderChanges)
-                {
-                    // Skip if registry already has this app
-                    if (current.Values.Any(a =>
-                        a.InstallLocation.Contains(fc.FolderName, StringComparison.OrdinalIgnoreCase) ||
-                        a.Name.Equals(fc.FolderName, StringComparison.OrdinalIgnoreCase)))
-                        continue;
-
-                    var changeType = fc.ChangeType == FolderChangeType.Created
-                        ? ChangeType.Installed : ChangeType.Removed;
-
-                    var app = new InstalledApp(
-                        KeyPath: $"FILESYSTEM\\{fc.FolderPath}",
-                        Name: fc.FolderName,
-                        Version: "",
-                        Publisher: "",
-                        InstallDate: fc.DetectedAt.ToString("yyyyMMdd"),
-                        InstallLocation: fc.FolderPath,
-                        InstalledBy: "Unknown",
-                        InstallSource: $"File drop in {Path.GetDirectoryName(fc.FolderPath)}",
-                        InstallType: "Portable/Unknown"
-                    );
-
-                    var ce = new ChangeEvent(app, changeType, null, fc.DetectedAt, DetectionSource.FileSystem);
-                    newEvents.Add(ce);
-                    _store.AppendHistory([ce]);
-                }
-            }
-            catch { }
-
-            // 4. Services & Scheduled Tasks
-            try
-            {
-                var svcChanges = _serviceTaskScanner.CheckForChanges();
-                foreach (var sc in svcChanges)
-                {
-                    var changeType = sc.ChangeType == ServiceTaskChangeType.Added
-                        ? ChangeType.Installed : ChangeType.Removed;
-
-                    var source = sc.ItemType == ServiceTaskType.Service
-                        ? DetectionSource.Service : DetectionSource.ScheduledTask;
-
-                    var typeLabel = sc.ItemType == ServiceTaskType.Service
-                        ? "Windows Service" : "Scheduled Task";
-
-                    var app = new InstalledApp(
-                        KeyPath: $"{sc.ItemType.ToString().ToUpper()}\\{sc.Name}",
-                        Name: $"[{typeLabel}] {sc.Name}",
-                        Version: "",
-                        Publisher: "",
-                        InstallDate: sc.DetectedAt.ToString("yyyyMMdd"),
-                        InstallLocation: "",
-                        InstalledBy: "SYSTEM/Admin",
-                        InstallSource: sc.Details,
-                        InstallType: typeLabel
-                    );
-
-                    var ce = new ChangeEvent(app, changeType, null, sc.DetectedAt, source);
-                    newEvents.Add(ce);
-                    _store.AppendHistory([ce]);
-                }
-            }
-            catch { }
-
-            // 5. Apply exclusions — remove logging-excluded apps, track notification-excluded
-            var loggingExcluded = newEvents.Where(e => _exclusionStore.IsExcludedFromLogging(e.App.Name)).ToList();
-            newEvents.RemoveAll(e => _exclusionStore.IsExcludedFromLogging(e.App.Name));
-
-            var notifyEvents = newEvents.Where(e => !_exclusionStore.IsExcludedFromNotifications(e.App.Name)).ToList();
-
-            if (_isClosing || !IsHandleCreated) return;
-            try
-            {
-                Invoke(() =>
-                {
-                    if (_isClosing) return;
-                    if (newEvents.Count > 0)
-                    {
-                        _allEvents.InsertRange(0, newEvents);
-                        ApplyFilter();
-                        ShowNotifications(notifyEvents);
-                    }
-
-                    SetStatus($"Last scanned: {DateTime.Now:HH:mm:ss}  ·  {current.Count} apps tracked  ·  {_allEvents.Count} change events  ·  Sources: Registry, EventLog, FileSystem, Services");
-                    _btnScanNow.Enabled = true;
-                });
-            }
-            catch (ObjectDisposedException) { }
-        });
+        // Disposing the backend lets an in-flight scan finish its transaction first.
+        _backend.Dispose();
+        base.OnFormClosed(e);
     }
 
-    private void StartTimer(int minutes)
-    {
-        _scanTimer?.Stop();
-        _scanTimer?.Dispose();
-        if (minutes <= 0) return;
+    // ── Scanning (delegated to the engine) ───────────────────────────────────
 
-        _scanTimer = new System.Windows.Forms.Timer { Interval = minutes * 60_000 };
-        _scanTimer.Tick += (_, _) => PerformScan(isStartup: false);
-        _scanTimer.Start();
+    private async void RequestScan()
+    {
+        try
+        {
+            await _backend.RequestScanAsync();
+            SetStatus("Scan queued…");
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Could not start a scan: {ex.Message}");
+        }
+    }
+
+    private void OnEventsDetected(IReadOnlyList<ChangeEvent> events)
+    {
+        var added = InsertEvents(events);
+        if (added.Count == 0) return;
+        ApplyFilter();
+        ShowNotifications(added.Where(e => !e.Silent).ToList());
+        OnStatusChanged(_backend.Status);
+    }
+
+    /// <summary>Adds events not already shown (a scan can race the initial history load).</summary>
+    private List<ChangeEvent> InsertEvents(IEnumerable<ChangeEvent> events)
+    {
+        var added = events.Where(e => e.Id == 0 || _knownEventIds.Add(e.Id)).ToList();
+        if (added.Count > 0)
+            _allEvents.InsertRange(0, added.OrderByDescending(e => e.DetectedAt));
+        return added;
+    }
+
+    private void OnStatusChanged(EngineStatus status) => SetStatus(FormatStatus(status));
+
+    private string FormatStatus(EngineStatus s)
+    {
+        if (s.IsScanning)
+            return $"Scanning registry, Store, event log, services and folders…  ·  {_backend.Mode} mode";
+
+        var parts = new List<string>
+        {
+            s.LastScanUtc is { } last ? $"Last scanned: {last.ToLocalTime():HH:mm:ss}" : "Waiting for first scan",
+            $"{s.TrackedApps} apps tracked",
+            $"{_allEvents.Count} change events",
+            $"{_backend.Mode} mode"
+        };
+        var degraded = s.Sources.Where(kv => kv.Value != "ok").Select(kv => $"{kv.Key}: {kv.Value}").ToList();
+        if (degraded.Count > 0) parts.Add(string.Join(", ", degraded));
+        if (!string.IsNullOrEmpty(s.LastError)) parts.Add("⚠ " + s.LastError);
+        else if (!string.IsNullOrEmpty(s.Notice)) parts.Add(s.Notice);
+        return string.Join("  ·  ", parts);
     }
 
     // ── Notifications ────────────────────────────────────────────────────────
@@ -1195,49 +1074,37 @@ public partial class MainForm : Form
 
     // ── List management ──────────────────────────────────────────────────────
 
-    private void LoadHistory()
+    private async Task LoadHistoryAsync()
     {
-        _allEvents = _store.LoadHistory();
-        _allEvents.Sort((a, b) => b.DetectedAt.CompareTo(a.DetectedAt));
+        var history = await _backend.GetHistoryAsync();
+        var historyIds = history.Select(e => e.Id).ToHashSet();
+
+        // Keep anything that arrived from a scan while the history was loading.
+        var arrivedMeanwhile = _allEvents.Where(e => !historyIds.Contains(e.Id));
+        _allEvents = arrivedMeanwhile.Concat(history).ToList();
+
+        _knownEventIds.Clear();
+        _knownEventIds.UnionWith(_allEvents.Select(e => e.Id));
         ApplyFilter();
     }
 
     private ListViewItem MakeItem(ChangeEvent ev)
     {
-        var item = new ListViewItem(ev.DetectedAt.ToString("yyyy-MM-dd HH:mm:ss"));
+        // Every column comes from data captured at detection time — no disk or
+        // package-manager lookups while drawing the list.
+        var item = new ListViewItem(EventDisplay.LocalTime(ev.EffectiveTime));
         item.SubItems.Add(ev.App.Name);
         item.SubItems.Add(ev.App.Version);
         item.SubItems.Add(ev.ChangeType.ToString());
         item.SubItems.Add(ev.App.Publisher);
         item.SubItems.Add(ev.PreviousVersion ?? "");
-        item.SubItems.Add(ev.App.InstalledBy);
+        item.SubItems.Add(EventDisplay.Who(ev));
         item.SubItems.Add(ev.App.InstallSource);
         item.SubItems.Add(ev.App.InstallType);
-        item.SubItems.Add(GetInstallSize(ev.App.InstallLocation));
-        item.SubItems.Add(_pkgDetector.Detect(ev.App.Name, ev.App.Version, ev.App.InstallLocation));
+        item.SubItems.Add(EventDisplay.Size(ev));
+        item.SubItems.Add(ev.App.PackageManager);
         item.Tag = ev;
         return item;
-    }
-
-    private static string GetInstallSize(string installLocation)
-    {
-        if (string.IsNullOrWhiteSpace(installLocation)) return "";
-        try
-        {
-            var dir = new DirectoryInfo(installLocation);
-            if (!dir.Exists) return "";
-            long totalBytes = dir.EnumerateFiles("*", SearchOption.AllDirectories).Sum(f => f.Length);
-            return FormatSize(totalBytes);
-        }
-        catch { return ""; }
-    }
-
-    private static string FormatSize(long bytes)
-    {
-        if (bytes < 1024) return $"{bytes} B";
-        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
-        if (bytes < 1024 * 1024 * 1024) return $"{bytes / (1024.0 * 1024):F1} MB";
-        return $"{bytes / (1024.0 * 1024 * 1024):F2} GB";
     }
 
     // ── Column Sorting ───────────────────────────────────────────────────────
@@ -1315,16 +1182,19 @@ public partial class MainForm : Form
             ("Version", app.Version),
             ("Publisher", app.Publisher),
             ("Change Type", ev.ChangeType.ToString()),
-            ("Detected At", ev.DetectedAt.ToString("yyyy-MM-dd HH:mm:ss")),
+            ("Happened At", ev.OccurredAt is { } at ? EventDisplay.LocalTime(at) : "—"),
+            ("Detected At", EventDisplay.LocalTime(ev.DetectedAt)),
             ("Previous Version", ev.PreviousVersion ?? "—"),
+            ("Details", string.IsNullOrEmpty(ev.Details) ? "—" : ev.Details),
             ("", ""),  // spacer
-            ("Installed By", app.InstalledBy),
+            ("Changed By", string.IsNullOrEmpty(ev.ChangedBy) ? "—" : ev.ChangedBy),
+            ("Installed For", string.IsNullOrEmpty(app.InstalledFor) ? "—" : app.InstalledFor),
             ("Install Source", string.IsNullOrEmpty(app.InstallSource) ? "—" : app.InstallSource),
             ("Install Type", app.InstallType),
             ("Install Date", string.IsNullOrEmpty(app.InstallDate) ? "—" : app.InstallDate),
             ("Install Location", string.IsNullOrEmpty(app.InstallLocation) ? "—" : app.InstallLocation),
-            ("Install Size", GetInstallSize(app.InstallLocation)),
-            ("Pkg Manager", _pkgDetector.Detect(app.Name, app.Version, app.InstallLocation)),
+            ("Install Size", EventDisplay.Size(ev)),
+            ("Pkg Manager", string.IsNullOrEmpty(app.PackageManager) ? "—" : app.PackageManager),
             ("", ""),  // spacer
             ("Detection Source", ev.Source.ToString()),
             ("Registry Key", app.KeyPath)
@@ -1482,16 +1352,25 @@ public partial class MainForm : Form
 
     // ── Event handlers ───────────────────────────────────────────────────────
 
-    private void OnClearHistory(object? sender, EventArgs e)
+    private async void OnClearHistory(object? sender, EventArgs e)
     {
         if (MessageBox.Show("Clear all change history?\nThis cannot be undone.",
             "Clear History", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
             return;
 
-        _store.ClearHistory();
-        _allEvents.Clear();
-        _listView.Items.Clear();
-        SetStatus("History cleared.");
+        try
+        {
+            await _backend.ClearHistoryAsync();
+            _allEvents.Clear();
+            _knownEventIds.Clear();
+            _listView.Items.Clear();
+            SetStatus("History cleared.");
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Could not clear history: {ex.Message}", "Clear History",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 
     private void OnExportCsv(object? sender, EventArgs e)
@@ -1507,17 +1386,18 @@ public partial class MainForm : Form
         try
         {
             using var w = new StreamWriter(dlg.FileName);
-            w.WriteLine("DetectedAt,AppName,Version,ChangeType,Publisher,PreviousVersion,InstalledBy,InstallSource,InstallType,Size,PkgManager");
+            w.WriteLine("OccurredAt,DetectedAt,AppName,Version,ChangeType,Publisher,PreviousVersion,ChangedBy,InstalledFor,InstallSource,InstallType,Size,PkgManager,Source,Details");
             foreach (var ev in _allEvents)
             {
                 w.WriteLine(string.Join(",",
-                    Csv(ev.DetectedAt.ToString("yyyy-MM-dd HH:mm:ss")),
+                    Csv(ev.OccurredAt is { } at ? EventDisplay.LocalTime(at) : ""),
+                    Csv(EventDisplay.LocalTime(ev.DetectedAt)),
                     Csv(ev.App.Name), Csv(ev.App.Version),
                     Csv(ev.ChangeType.ToString()), Csv(ev.App.Publisher),
-                    Csv(ev.PreviousVersion ?? ""), Csv(ev.App.InstalledBy),
+                    Csv(ev.PreviousVersion ?? ""), Csv(EventDisplay.Who(ev)), Csv(ev.App.InstalledFor),
                     Csv(ev.App.InstallSource), Csv(ev.App.InstallType),
-                    Csv(GetInstallSize(ev.App.InstallLocation)),
-                    Csv(_pkgDetector.Detect(ev.App.Name, ev.App.Version, ev.App.InstallLocation))));
+                    Csv(EventDisplay.Size(ev)), Csv(ev.App.PackageManager),
+                    Csv(ev.Source.ToString()), Csv(ev.Details)));
             }
             SetStatus($"✓ Exported {_allEvents.Count} events to {Path.GetFileName(dlg.FileName)}");
         }
@@ -1527,32 +1407,41 @@ public partial class MainForm : Form
         }
     }
 
-    private void OnIntervalChanged(object? sender, EventArgs e)
+    private async void OnIntervalChanged(object? sender, EventArgs e)
     {
+        if (_applyingSettings) return;
         _intervalIndex = _cmbInterval.SelectedIndex;
-        SaveIntervalPref();
-        int minutes = _intervalIndex switch { 0 => 1, 1 => 5, 2 => 10, 3 => 30, _ => 0 };
-        StartTimer(minutes);
+        var minutes = IntervalMinutes[Math.Clamp(_intervalIndex, 0, IntervalMinutes.Length - 1)];
+        try
+        {
+            var current = await _backend.GetSettingsAsync();
+            await _backend.SaveSettingsAsync(current with { ScanIntervalMinutes = minutes });
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Could not change the scan interval: {ex.Message}");
+        }
     }
 
-    private void OnInstalledAppsClick(object? sender, EventArgs e)
+    private async void OnInstalledAppsClick(object? sender, EventArgs e)
     {
         _btnInstalledApps.Enabled = false;
-        Cursor = Cursors.WaitCursor;
-        SetStatus("Scanning installed apps…");
-
-        Task.Run(() =>
+        try
         {
-            var apps = RegistryScanner.Scan();
-            Invoke(() =>
-            {
-                Cursor = Cursors.Default;
-                _btnInstalledApps.Enabled = true;
-                SetStatus($"Ready  ·  {apps.Count} apps found on this machine");
-                using var frm = new InstalledAppsForm(apps, _theme, _isDarkMode, _pkgDetector, _exclusionStore);
-                frm.ShowDialog(this);
-            });
-        });
+            // The engine keeps the inventory current; no extra scan is needed to show it.
+            var apps = await _backend.GetInventoryAsync();
+            SetStatus($"Ready  ·  {apps.Count} apps found on this machine");
+            using var frm = new InstalledAppsForm(apps, _theme, _isDarkMode, _exclusionStore, _backend.GetInventoryAsync);
+            frm.ShowDialog(this);
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Could not load installed apps: {ex.Message}");
+        }
+        finally
+        {
+            _btnInstalledApps.Enabled = true;
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

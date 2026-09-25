@@ -52,7 +52,7 @@ internal class SnapshotCompareForm : Form
 
         // Default: 7 days ago
         var earliestDate = _allEvents.Count > 0
-            ? _allEvents.Min(e => e.DetectedAt).Date
+            ? _allEvents.Min(e => e.DetectedAt).ToLocalTime().Date
             : DateTime.Today.AddDays(-30);
 
         _dtpFrom = new DateTimePicker
@@ -281,7 +281,7 @@ internal class SnapshotCompareForm : Form
         var to = _dtpTo.Value;
 
         var filtered = _allEvents
-            .Where(e => e.DetectedAt >= from && e.DetectedAt <= to)
+            .Where(e => e.DetectedAt.ToLocalTime() >= from && e.DetectedAt.ToLocalTime() <= to)
             .OrderByDescending(e => e.DetectedAt)
             .ToList();
 
@@ -290,16 +290,16 @@ internal class SnapshotCompareForm : Form
 
         foreach (var ev in filtered)
         {
-            var item = new ListViewItem(ev.DetectedAt.ToString("yyyy-MM-dd HH:mm:ss"));
+            var item = new ListViewItem(EventDisplay.LocalTime(ev.EffectiveTime));
             item.SubItems.Add(ev.App.Name);
             item.SubItems.Add(ev.App.Version);
             item.SubItems.Add(ev.ChangeType.ToString());
             item.SubItems.Add(ev.App.Publisher);
             item.SubItems.Add(ev.PreviousVersion ?? "");
-            item.SubItems.Add(ev.App.InstalledBy);
+            item.SubItems.Add(EventDisplay.Who(ev));
             item.SubItems.Add(ev.App.InstallSource);
             item.SubItems.Add(ev.App.InstallType);
-            item.SubItems.Add(GetInstallSize(ev.App.InstallLocation));
+            item.SubItems.Add(EventDisplay.Size(ev));
             item.SubItems.Add(ev.Source.ToString());
             item.Tag = ev;
             _resultList.Items.Add(item);
@@ -361,20 +361,4 @@ internal class SnapshotCompareForm : Form
     private static string CsvEscape(string s) =>
         s.Contains(',') || s.Contains('"') || s.Contains('\n')
             ? $"\"{s.Replace("\"", "\"\"")}\"" : s;
-
-    private static string GetInstallSize(string installLocation)
-    {
-        if (string.IsNullOrWhiteSpace(installLocation)) return "";
-        try
-        {
-            var dir = new DirectoryInfo(installLocation);
-            if (!dir.Exists) return "";
-            long totalBytes = dir.EnumerateFiles("*", SearchOption.AllDirectories).Sum(f => f.Length);
-            if (totalBytes < 1024) return $"{totalBytes} B";
-            if (totalBytes < 1024 * 1024) return $"{totalBytes / 1024.0:F1} KB";
-            if (totalBytes < 1024 * 1024 * 1024) return $"{totalBytes / (1024.0 * 1024):F1} MB";
-            return $"{totalBytes / (1024.0 * 1024 * 1024):F2} GB";
-        }
-        catch { return ""; }
-    }
 }

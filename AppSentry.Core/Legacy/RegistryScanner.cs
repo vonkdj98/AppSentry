@@ -92,17 +92,18 @@ public static class RegistryScanner
 
                     var keyPath = $"{hivePrefix}\\{subKeyPath}\\{subKeyName}";
 
-                    var app = new InstalledApp(
-                        KeyPath: keyPath,
-                        Name: name.Trim(),
-                        Version: version.Trim(),
-                        Publisher: publisher.Trim(),
-                        InstallDate: installDate.Trim(),
-                        InstallLocation: installLocation.Trim(),
-                        InstalledBy: installedBy,
-                        InstallSource: installSource.Trim(),
-                        InstallType: installType
-                    );
+                    var app = new InstalledApp
+                    {
+                        KeyPath = keyPath,
+                        Name = name.Trim(),
+                        Version = version.Trim(),
+                        Publisher = publisher.Trim(),
+                        InstallDate = installDate.Trim(),
+                        InstallLocation = installLocation.Trim(),
+                        InstalledBy = installedBy,
+                        InstallSource = installSource.Trim(),
+                        InstallType = installType
+                    };
 
                     apps[keyPath] = app;
                 }
@@ -182,17 +183,18 @@ public static class RegistryScanner
 
                             var keyPath = $"{hivePrefix}\\{uninstallPath}\\{subKeyName}";
 
-                            var app = new InstalledApp(
-                                KeyPath: keyPath,
-                                Name: name.Trim(),
-                                Version: version.Trim(),
-                                Publisher: publisher.Trim(),
-                                InstallDate: installDate.Trim(),
-                                InstallLocation: installLocation.Trim(),
-                                InstalledBy: userName,
-                                InstallSource: installSource.Trim(),
-                                InstallType: installType
-                            );
+                            var app = new InstalledApp
+                            {
+                                KeyPath = keyPath,
+                                Name = name.Trim(),
+                                Version = version.Trim(),
+                                Publisher = publisher.Trim(),
+                                InstallDate = installDate.Trim(),
+                                InstallLocation = installLocation.Trim(),
+                                InstalledBy = userName,
+                                InstallSource = installSource.Trim(),
+                                InstallType = installType
+                            };
 
                             apps[keyPath] = app;
                         }
@@ -240,21 +242,9 @@ public static class RegistryScanner
     {
         try
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "powershell.exe",
-                Arguments = "-NoProfile -NonInteractive -Command \"Get-AppxPackage | Select-Object Name, PackageFullName, Version, Publisher, InstallLocation, SignatureKind, IsFramework | ConvertTo-Csv -NoTypeInformation\"",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-
-            using var proc = Process.Start(psi);
-            if (proc == null) return;
-
-            var output = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit(15000); // 15 second timeout
+            var output = AppSentry.Core.Util.ProcessRunner.Run("powershell.exe",
+                "-NoProfile -NonInteractive -Command \"Get-AppxPackage | Select-Object Name, PackageFullName, Version, Publisher, InstallLocation, SignatureKind, IsFramework | ConvertTo-Csv -NoTypeInformation\"",
+                TimeSpan.FromSeconds(30)).StdOut;
 
             if (string.IsNullOrWhiteSpace(output)) return;
 
@@ -302,17 +292,18 @@ public static class RegistryScanner
                         _ => "Store/Sideloaded"
                     };
 
-                    var app = new InstalledApp(
-                        KeyPath: keyPath,
-                        Name: displayName,
-                        Version: version.Trim(),
-                        Publisher: cleanPublisher,
-                        InstallDate: "",
-                        InstallLocation: installLocation.Trim(),
-                        InstalledBy: Environment.UserName,
-                        InstallSource: installSource,
-                        InstallType: "Store"
-                    );
+                    var app = new InstalledApp
+                    {
+                        KeyPath = keyPath,
+                        Name = displayName,
+                        Version = version.Trim(),
+                        Publisher = cleanPublisher,
+                        InstallDate = "",
+                        InstallLocation = installLocation.Trim(),
+                        InstalledBy = Environment.UserName,
+                        InstallSource = installSource,
+                        InstallType = "Store"
+                    };
 
                     apps[keyPath] = app;
                 }

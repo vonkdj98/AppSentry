@@ -7,9 +7,9 @@ internal class InstalledAppsForm : Form
 {
     private readonly ThemeColors _theme;
     private readonly bool _isDarkMode;
-    private readonly PackageManagerDetector _pkgDetector;
-    private readonly ExclusionStore _exclusionStore;
-    private Dictionary<string, InstalledApp> _apps;
+        private readonly ExclusionStore _exclusionStore;
+    private List<InstalledApp> _apps;
+    private readonly Func<Task<List<InstalledApp>>> _reload;
 
     // ── Controls ─────────────────────────────────────────────────────────────
     private Panel _toolbarPanel = null!;
@@ -36,12 +36,12 @@ internal class InstalledAppsForm : Form
     private const int ColPkgManager = 6;
     private const int ColInstallLocation = 7;
 
-    public InstalledAppsForm(Dictionary<string, InstalledApp> apps, ThemeColors theme, bool isDarkMode, PackageManagerDetector pkgDetector, ExclusionStore exclusionStore)
+    public InstalledAppsForm(List<InstalledApp> apps, ThemeColors theme, bool isDarkMode, ExclusionStore exclusionStore, Func<Task<List<InstalledApp>>> reload)
     {
         _apps = apps;
         _theme = theme;
         _isDarkMode = isDarkMode;
-        _pkgDetector = pkgDetector;
+        _reload = reload;
         _exclusionStore = exclusionStore;
 
         BuildForm();
@@ -336,8 +336,8 @@ internal class InstalledAppsForm : Form
         _listView.Items.Clear();
 
         var source = string.IsNullOrEmpty(filter)
-            ? _apps.Values
-            : _apps.Values.Where(a =>
+            ? _apps
+            : _apps.Where(a =>
                 a.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
                 a.Publisher.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
                 a.Version.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
@@ -366,8 +366,8 @@ internal class InstalledAppsForm : Form
         item.SubItems.Add(app.Publisher);
         item.SubItems.Add(FormatInstallDate(app.InstallDate));
         item.SubItems.Add(app.InstallType);
-        item.SubItems.Add(GetInstallSize(app.InstallLocation));
-        item.SubItems.Add(_pkgDetector.Detect(app.Name, app.Version, app.InstallLocation));
+        item.SubItems.Add(EventDisplay.Size(app));
+        item.SubItems.Add(app.PackageManager);
         item.SubItems.Add(app.InstallLocation);
         item.Tag = app;
         return item;
@@ -501,8 +501,8 @@ internal class InstalledAppsForm : Form
             Install Location: {app.InstallLocation}
             Install Source:   {app.InstallSource}
             Installed By:     {app.InstalledBy}
-            Size:             {GetInstallSize(app.InstallLocation)}
-            Pkg Manager:      {_pkgDetector.Detect(app.Name, app.Version, app.InstallLocation)}
+            Size:             {EventDisplay.Size(app)}
+            Pkg Manager:      {app.PackageManager}
             Registry Key:     {app.KeyPath}
             """;
         Clipboard.SetText(details);
@@ -571,8 +571,8 @@ internal class InstalledAppsForm : Form
             ("Installed By",     app.InstalledBy),
             ("Install Source",   string.IsNullOrEmpty(app.InstallSource) ? "—" : app.InstallSource),
             ("Install Location", string.IsNullOrEmpty(app.InstallLocation) ? "—" : app.InstallLocation),
-            ("Install Size",     GetInstallSize(app.InstallLocation)),
-            ("Pkg Manager",      _pkgDetector.Detect(app.Name, app.Version, app.InstallLocation)),
+            ("Install Size",     EventDisplay.Size(app)),
+            ("Pkg Manager",      app.PackageManager),
             ("",                 ""),
             ("Registry Key",     app.KeyPath)
         };
@@ -650,76 +650,37 @@ internal class InstalledAppsForm : Form
 
     // ── Refresh ───────────────────────────────────────────────────────────────
 
-    private void OnRefreshClick(object? sender, EventArgs e)
+    private async void OnRefreshClick(object? sender, EventArgs e)
     {
         _btnRefresh.Enabled = false;
-        _statusLabel.Text = "Scanning installed apps…";
+        _statusLabel.Text = "Loading installed apps…";
         Cursor = Cursors.WaitCursor;
-
-        Task.Run(() =>
+        try
         {
-            var apps = RegistryScanner.Scan();
-            Invoke(() =>
-            {
-                _apps = apps;
-                Cursor = Cursors.Default;
-                _btnRefresh.Enabled = true;
-                ApplyFilter();
-            });
-        });
+            _apps = await _reload();
+            ApplyFilter();
+        }
+        catch (Exception ex)
+        {
+            _statusLabel.Text = $"Refresh failed: {ex.Message}";
+        }
+        finally
+        {
+            Cursor = Cursors.Default;
+            _btnRefresh.Enabled = true;
+        }
     }
 
-    // ── Static helpers (duplicated from MainForm) ─────────────────────────────
+    // ── Static helpers ────────────────────────────────────────────────────────
 
     private static string GetUninstallString(string keyPath)
     {
         try
         {
-            RegistryKey? hive = null;
-            string subPath;
-
-            if (keyPath.StartsWith("HKLM\\"))
-            {
-                hive = Registry.LocalMachine;
-                subPath = keyPath[5..];
-            }
-            else if (keyPath.StartsWith("HKCU\\"))
-            {
-                hive = Registry.CurrentUser;
-                subPath = keyPath[5..];
-            }
-            else if (keyPath.StartsWith("HKU\\"))
-            {
-                hive = Registry.Users;
-                subPath = keyPath[4..];
-            }
-            else return "";
-
-            using var key = hive.OpenSubKey(subPath, false);
+            using var key = AppSentry.Core.Util.RegistryPaths.OpenReadOnly(keyPath);
             return key?.GetValue("UninstallString") as string ?? "";
         }
         catch { return ""; }
-    }
-
-    private static string GetInstallSize(string installLocation)
-    {
-        if (string.IsNullOrWhiteSpace(installLocation)) return "";
-        try
-        {
-            var dir = new DirectoryInfo(installLocation);
-            if (!dir.Exists) return "";
-            long totalBytes = dir.EnumerateFiles("*", SearchOption.AllDirectories).Sum(f => f.Length);
-            return FormatSize(totalBytes);
-        }
-        catch { return ""; }
-    }
-
-    private static string FormatSize(long bytes)
-    {
-        if (bytes < 1024) return $"{bytes} B";
-        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
-        if (bytes < 1024 * 1024 * 1024) return $"{bytes / (1024.0 * 1024):F1} MB";
-        return $"{bytes / (1024.0 * 1024 * 1024):F2} GB";
     }
 
     // ── UI helpers ────────────────────────────────────────────────────────────

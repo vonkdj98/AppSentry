@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Windows 10 SDK TFM gives us the WinRT PackageManager API for Store apps. -->
+    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>AppSentry.Core</AssemblyName>
+    <RootNamespace>AppSentry.Core</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.20" />
+    <PackageReference Include="System.Diagnostics.EventLog" Version="9.0.20" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="9.0.20" />
+  </ItemGroup>
+
+</Project>
