@@ -233,7 +233,7 @@ public sealed class FolderOwnership
     }
 
     /// <summary>Executable path from a command line such as "\"C:\x\unins000.exe\" /S" or "C:\x\u.exe,0".</summary>
-    internal static string ExecutableOf(string commandLine)
+    public static string ExecutableOf(string commandLine)
     {
         var s = Environment.ExpandEnvironmentVariables(commandLine.Trim());
         if (s.Length == 0) return "";
