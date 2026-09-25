@@ -15,7 +15,7 @@ namespace AppSentry.Demo;
 /// </summary>
 public static class ScreenshotRunner
 {
-    public static int Run(string dir, string theme)
+    public static int Run(string dir, string theme, bool synthetic = false)
     {
         Directory.CreateDirectory(dir);
         var app = new App();
@@ -29,7 +29,7 @@ public static class ScreenshotRunner
             try
             {
                 app.ApplyTheme(theme);
-                var backend = new DemoBackend();
+                var backend = new DemoBackend(synthetic);
                 var shell = new ShellViewModel(backend, new UiSettings { Theme = theme });
                 var window = new MainWindow(shell)
                 {
