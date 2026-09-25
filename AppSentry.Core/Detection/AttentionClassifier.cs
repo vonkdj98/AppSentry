@@ -24,7 +24,7 @@ public static class AttentionClassifier
 {
     private static readonly string[] SecurityProducts =
     [
-        "crowdstrike", "falcon sensor", "windows defender", "microsoft defender", "sentinelone", "sentinel agent",
+        "crowdstrike", "falcon sensor", "endpoint protection", "endpoint security", "antivirus", "anti-virus", "windows defender", "microsoft defender", "sentinelone", "sentinel agent",
         "cybereason", "sophos", "carbon black", "bitdefender", "eset", "malwarebytes", "symantec", "mcafee",
         "trend micro", "wazuh", "huntress", "sysmon", "tanium", "cortex xdr", "trellix", "webroot"
     ];

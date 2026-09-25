@@ -20,42 +20,47 @@ An open-source Windows 11 application that monitors software installs, updates, 
 - Install **size** and the time the change **actually happened** are captured when it's detected
 
 ### User Interface
-- Color-coded history list (green = installed, blue = updated, red = removed/failed, amber = modified)
-- **Dark mode**, **light mode**, or follow **system theme**
-- Owner-drawn ListView with alternating rows and accent colors
-- **Resizable and reorderable columns** (layout persisted across restarts)
-- **Search/filter** bar for real-time filtering by app name, publisher, type, etc.
-- **Column sorting** — click any header to sort ascending/descending
-- Custom programmatic app icon (no external assets required)
+- Windows 11 **Fluent** look (WPF, .NET 9 Fluent theme): Mica, rounded corners, your accent color, light/dark following Windows or chosen in Settings
+- **Activity**: changes grouped by day, with real app icons, summary cards for the chosen period, filter chips (type, source, time range, "needs a look") and search
+- **Details pane** beside the list: what happened in one sentence, who did it, the before/after values that changed, and actions — open folder, uninstall, exclude, copy details, **copy as change record** (a bulleted write-up for a change ticket)
+- **Installed apps**: every app with its icon, size bar, install date and scope filters (machine-wide, per-user, Store, Scoop), plus each app's own change history
+- **Services and tasks**: every service, driver and scheduled task the engine tracks — what it runs and as whom — with Microsoft's own components hidden by default
+- **Exclusions** edited in place, each showing how many past events it matches
+- Crisp at any display scaling (per-monitor DPI aware), keyboard and screen-reader friendly
 
-### Notifications
-- **Popup notification** slides in from the bottom-right when changes are detected
-- Stays visible until dismissed, or **auto-hides** after 10/30/60 seconds (configurable)
-- **Optional sound alerts** when changes are detected
-- Click "View Details" to jump to the event in the main window
-- **Exclusions**: exact names, wildcards (`7-Zip*`, `[Scheduled Task] \Adobe*`) and version-free matching, so an exclusion keeps working after the app updates. Choose "don't notify" or "don't log at all".
+### Needs a look
+Changes that deserve a human's eyes are flagged, counted on the Activity page and in the tray icon, and can be marked reviewed:
+- failed installs, new drivers, tasks that run elevated, changed uninstall commands, programs dropped without an installer
+- services whose binary or account changed — **critical** when a Microsoft binary is swapped for a non-Microsoft one
+- removal of security software (CrowdStrike, Defender, SentinelOne, Wazuh, …)
 
-### Tools
-- **Snapshot Comparison** — pick a date range and see all changes between those dates, with quick-select buttons (Today, 24h, 7 days, 30 days, All)
-- **Diff View** — for updated or modified apps, every uninstall-key value before vs after the change
-- **Export CSV** — export full history or comparison results
-- **Right-click context menu**:
-  - Uninstall app (MSI via `msiexec /x`, Store apps via PackageManager; elevation only for machine-wide apps)
-  - Open install location in Explorer
-  - Copy app name or full details to clipboard
-  - View details or diff
+The same rules set the Windows event log level (Error / Warning / Information), so a SIEM can alert on level alone.
+
+### Notifications and tray
+- **Native Windows notifications** with *View* and *Exclude* buttons; they follow Do Not Disturb and stay in Notification Center
+- Choose which change types notify; anything that needs a look can always notify; critical alerts can stay on screen until dismissed
+- **Tray icon** shows state (a dot when something needs a look, a pause badge while notifications are paused); its menu lists the latest changes and can pause notifications for 1 hour, 4 hours or until tomorrow
+- Closing the window keeps AppSentry in the notification area (optional); **Start with Windows** opens it there quietly
+- **Exclusions**: exact names, wildcards (`7-Zip*`, `[Scheduled Task] \Adobe*`) and version-free matching, so an exclusion keeps working after the app updates. Choose "don't notify" or "don't record at all".
 
 ### System Integration
 - **Background service** (optional): runs as LocalSystem, covers every user, keeps monitoring when nobody is signed in; the tray app connects to it automatically
 - Every change written to the **Windows Application log** (source `AppSentry`) for SIEM collection (e.g. Wazuh)
-- **Minimize to system tray** with custom icon
-- **Run at Windows startup** option
-- Single-instance enforcement (won't run duplicate copies)
+- **Export CSV** of the full history, including the attention reason for flagged items
+- Single-instance: launching again brings the running window forward
 - Configurable safety-net scan interval (1, 5, 10, 30 minutes, or off)
 
-## Screenshots
+## Command line
 
-*(Coming soon)*
+| Switch | What it does |
+|--------|--------------|
+| *(none)* | Tray app. Connects to the service if it's running, otherwise monitors in-process |
+| `--minimized` | Start hidden in the notification area (used by Start with Windows) |
+| `--install-service` / `--uninstall-service` | Install or remove the background service (UAC prompt) |
+| `--data-dir <path>` | Monitor in-process against another folder (testing, portable use) |
+| `--demo` | Sample data, no monitoring — for design review |
+| `--screenshots <dir> [--theme Light\|Dark]` | Render every page with sample data to PNGs, then exit |
+| `--export-icon <path>` | Write the app icon (.ico) |
 
 ## How It Works
 
@@ -92,13 +97,15 @@ When the service is running, the tray app shows "Service mode" and reads everyth
 
 | Event ID | Change | Level |
 |----------|--------|-------|
-| 1000 | Installed | Information |
-| 1001 | Updated | Information |
-| 1002 | Removed | Information |
-| 1003 | Modified | depends |
-| 1004 | Failed | depends |
+| 1000 | Installed | by attention |
+| 1001 | Updated | by attention |
+| 1002 | Removed | by attention |
+| 1003 | Modified | by attention |
+| 1004 | Failed | by attention |
 
-The message body is `Key: value` lines (App, Version, PreviousVersion, Publisher, ChangedBy, InstalledFor, Source, Key, OccurredAt, Details).
+"By attention" means the level follows the "needs a look" rules: Error for critical items (security software removed, a Microsoft service binary swapped for a non-Microsoft one), Warning for items that need a look, Information for everything else.
+
+The message body is `Key: value` lines (App, Version, PreviousVersion, Publisher, ChangedBy, InstalledFor, Source, Key, OccurredAt, Details). Flagged items add an `Attention:` line.
 
 ## Requirements
 
@@ -162,10 +169,13 @@ AppSentry.Core/                     # engine, no UI
   Ipc/                              # named-pipe protocol and server
   Service/                          # Windows service host, installer, event log writer
   Uninstaller.cs
-AppSentry/                          # WinForms tray app
+AppSentry/                          # WPF tray app (Fluent theme)
   Program.cs                        # entry point: tray app, --service, --install-service, ...
-  MainForm.cs                       # main window, toolbar, history list
-  InstalledAppsForm.cs, ExclusionsForm.cs, SnapshotCompareForm.cs, DiffViewForm.cs, NotificationForm.cs
+  App.xaml                          # theme and shared styles
+  Views/                            # MainWindow, Activity, Installed, Services and tasks, Exclusions, Settings
+  ViewModels/                       # one per page, plus the shell (navigation, status, "needs a look")
+  Services/                         # notifications, tray, app icons, brand icon, settings, exports
+  Demo/                             # sample-data backend and the screenshot renderer
 AppSentry.Tests/                    # xUnit
 ```
 
