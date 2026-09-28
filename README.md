@@ -2,6 +2,12 @@
 
 An open-source Windows 11 application that monitors software installs, updates, and removals in real-time — similar to the install-tracking feature in IObit Uninstaller, but free and open source.
 
+## Download
+
+Get **AppSentry.exe** from the [latest release](https://github.com/vonkdj98/AppSentry/releases/latest) and run it. It's a single self-contained file: no installer and no .NET runtime needed. To monitor every user and keep watching when nobody is signed in, install the background service from Settings (or run `AppSentry.exe --install-service`).
+
+The exe isn't code-signed yet, so Windows SmartScreen may warn the first time; choose **More info → Run anyway**.
+
 ## Features
 
 ### Core Monitoring
@@ -39,7 +45,7 @@ The same rules set the Windows event log level (Error / Warning / Information), 
 ### Notifications and tray
 - **Native Windows notifications** with *View* and *Exclude* buttons; they follow Do Not Disturb and stay in Notification Center
 - Choose which change types notify; anything that needs a look can always notify; critical alerts can stay on screen until dismissed
-- **Tray icon** shows state (a dot when something needs a look, a pause badge while notifications are paused); its menu lists the latest changes and can pause notifications for 1 hour, 4 hours or until tomorrow
+- **Tray icon** shows state in its badge (green normally, amber when something needs a look, grey with a pause sign while notifications are paused); its menu lists the latest changes and can pause notifications for 1 hour, 4 hours or until tomorrow
 - Closing the window keeps AppSentry in the notification area (optional); **Start with Windows** opens it there quietly
 - **Exclusions**: exact names, wildcards (`7-Zip*`, `[Scheduled Task] \Adobe*`) and version-free matching, so an exclusion keeps working after the app updates. Choose "don't notify" or "don't record at all".
 
@@ -113,7 +119,7 @@ AppSentry.exe --install-service
 AppSentry.exe --uninstall-service
 ```
 
-`--install-service` copies AppSentry to `%ProgramFiles%\AppSentry`, registers a delayed-start service with restart-on-failure, and starts it (UAC prompt). `--uninstall-service` stops and removes it; history is kept. The **🛡 Install Service** toolbar button does the same.
+`--install-service` copies AppSentry to `%ProgramFiles%\AppSentry`, registers a delayed-start service with restart-on-failure, and starts it (UAC prompt). `--uninstall-service` stops and removes it; history is kept. The **Install service** button in Settings does the same.
 
 When the service is running, the tray app shows "Service mode" and reads everything from it over `\\.\pipe\AppSentry`:
 
@@ -164,7 +170,8 @@ dotnet publish AppSentry/AppSentry.csproj ^
   -r win-x64 ^
   --self-contained true ^
   -p:PublishSingleFile=true ^
-  -p:IncludeNativeLibrariesForSelfExtract=true
+  -p:IncludeNativeLibrariesForSelfExtract=true ^
+  -p:EnableCompressionInSingleFile=true
 ```
 
 The output exe will be in:
