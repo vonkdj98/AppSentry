@@ -2,6 +2,7 @@ using AppSentry.Core.Sources;
 using AppSentry.Models;
 using AppSentry.Services;
 using AppSentry.ViewModels;
+using Microsoft.Toolkit.Uwp.Notifications;
 
 namespace AppSentry.UiTests;
 
@@ -210,6 +211,21 @@ public class NotificationRuleTests
 
         settings.NotificationsPausedUntilUtc = DateTime.UtcNow.AddMinutes(-1);
         Assert.True(ToastService.ShouldNotify(Ev(ChangeType.Failed), settings));
+    }
+
+    [Fact]
+    public void Notifications_stay_on_screen_until_dismissed_by_default_and_critical_ones_can_always()
+    {
+        var settings = new UiSettings();
+        Assert.Equal((ToastScenario.Reminder, (ToastDuration?)null), ToastService.OnScreenBehavior(settings, critical: false));
+
+        settings.OnScreen = NotificationOnScreen.Long;
+        Assert.Equal(((ToastScenario?)null, ToastDuration.Long), ToastService.OnScreenBehavior(settings, critical: false));
+        Assert.Equal((ToastScenario.Reminder, (ToastDuration?)null), ToastService.OnScreenBehavior(settings, critical: true));
+
+        settings.OnScreen = NotificationOnScreen.WindowsDefault;
+        settings.KeepCriticalOnScreen = false;
+        Assert.Equal(((ToastScenario?)null, (ToastDuration?)null), ToastService.OnScreenBehavior(settings, critical: true));
     }
 }
 

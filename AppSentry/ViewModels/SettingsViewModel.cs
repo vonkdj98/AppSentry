@@ -33,6 +33,12 @@ public sealed class SettingsViewModel : ObservableObject, IPage
             new("Off (real-time only)", 0)
         ];
         ThemeOptions = ["System", "Light", "Dark"];
+        OnScreenOptions =
+        [
+            new("Until I dismiss them", NotificationOnScreen.UntilDismissed),
+            new("About 25 seconds", NotificationOnScreen.Long),
+            new("A few seconds (Windows default)", NotificationOnScreen.WindowsDefault)
+        ];
         RetentionOptions =
         [
             new("Keep everything", 0),
@@ -199,6 +205,23 @@ public sealed class SettingsViewModel : ObservableObject, IPage
         get => _shell.Settings.NotificationSound;
         set { _shell.Settings.NotificationSound = value; Save(nameof(NotificationSound)); }
     }
+
+    public IReadOnlyList<Option<NotificationOnScreen>> OnScreenOptions { get; }
+
+    public Option<NotificationOnScreen> SelectedOnScreen
+    {
+        get => OnScreenOptions.FirstOrDefault(o => o.Value == _shell.Settings.OnScreen) ?? OnScreenOptions[0];
+        set
+        {
+            if (value == null) return;
+            _shell.Settings.OnScreen = value.Value;
+            Save(nameof(SelectedOnScreen));
+            OnPropertyChanged(nameof(CriticalOnScreenApplies));
+        }
+    }
+
+    /// <summary>The critical-alert override only matters when other notifications don't already stay up.</summary>
+    public bool CriticalOnScreenApplies => _shell.Settings.OnScreen != NotificationOnScreen.UntilDismissed;
 
     public bool KeepCriticalOnScreen
     {

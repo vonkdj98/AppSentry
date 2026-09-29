@@ -23,7 +23,11 @@ public sealed class UiSettings
 
     public bool NotificationSound { get; set; }
 
-    /// <summary>Critical items (security tool removed, service binary swapped) stay on screen until dismissed.</summary>
+    /// <summary>How long a notification stays on screen. Until dismissed matches v1's default popup.</summary>
+    public NotificationOnScreen OnScreen { get; set; } = NotificationOnScreen.UntilDismissed;
+
+    /// <summary>Critical items (security tool removed, service binary swapped) stay on screen until dismissed,
+    /// even when <see cref="OnScreen"/> lets other notifications go.</summary>
     public bool KeepCriticalOnScreen { get; set; } = true;
 
     public DateTime? NotificationsPausedUntilUtc { get; set; }
@@ -42,6 +46,13 @@ public sealed class UiSettings
     public bool WindowMaximized { get; set; }
 
     public bool NotificationsPaused => NotificationsPausedUntilUtc is { } until && until > DateTime.UtcNow;
+}
+
+public enum NotificationOnScreen
+{
+    UntilDismissed, // reminder scenario: stays until clicked or closed
+    Long,           // about 25 seconds
+    WindowsDefault  // Windows' own timeout (Accessibility > Visual effects, 5 s unless changed)
 }
 
 public static class UiSettingsStore
@@ -84,7 +95,7 @@ public static class UiSettingsStore
         }
     }
 
-    /// <summary>First run of v2: carry over the v1 theme and sound preferences.</summary>
+    /// <summary>First run of v2: carry over the v1 theme, sound and notification auto-hide preferences.</summary>
     private static UiSettings MigrateFromV1()
     {
         var settings = new UiSettings();
@@ -98,6 +109,15 @@ public static class UiSettingsStore
             }
             var sound = System.IO.Path.Combine(Dir, "sound.txt");
             if (File.Exists(sound)) settings.NotificationSound = File.ReadAllText(sound).Trim() == "1";
+            // v1 stored auto-hide seconds: 0 = stay until dismissed, else 10, 30 or 60.
+            var hide = System.IO.Path.Combine(Dir, "notifyhide.txt");
+            if (File.Exists(hide) && int.TryParse(File.ReadAllText(hide).Trim(), out var seconds))
+                settings.OnScreen = seconds switch
+                {
+                    <= 0 => NotificationOnScreen.UntilDismissed,
+                    < 25 => NotificationOnScreen.WindowsDefault,
+                    _ => NotificationOnScreen.Long
+                };
         }
         catch
         {
