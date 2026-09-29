@@ -60,18 +60,27 @@ public static class ScreenshotRunner
                 if (update != null) shell.Activity.Select(update.Id);
                 await Shot("activity-update");
 
-                shell.SelectedNav = shell.NavItems[1];
+                shell.SelectedNav = shell.NavItems.First(n => n.Page == shell.Installed);
                 await Settle();
                 shell.Installed.SelectedSort = shell.Installed.SortOptions[1]; // by size shows the bars
                 await Shot("installed");
 
-                shell.SelectedNav = shell.NavItems[2];
+                shell.SelectedNav = shell.NavItems.First(n => n.Page == shell.Persistence);
                 await Shot("services");
                 shell.Persistence.IsTasks = true;
                 await Shot("tasks");
 
-                shell.SelectedNav = shell.NavItems[3];
+                shell.SelectedNav = shell.NavItems.First(n => n.Page == shell.Exclusions);
                 await Shot("exclusions");
+
+                // Any other page (added by an edition) gets a shot named after its title.
+                var covered = new HashSet<object> { shell.Activity, shell.Installed, shell.Persistence, shell.Exclusions };
+                foreach (var extra in shell.NavItems.Where(n => !covered.Contains(n.Page)).ToList())
+                {
+                    shell.SelectedNav = extra;
+                    await Settle();
+                    await Shot(extra.Title.ToLowerInvariant().Replace(' ', '-'));
+                }
 
                 shell.SelectedNav = shell.SettingsNav;
                 await Shot("settings");

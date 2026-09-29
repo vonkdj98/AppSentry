@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <!-- Set when an edition (AppSentry.Edition.props) is compiled in; see Directory.Build.props. -->
+    <DefineConstants Condition="'$(AppSentryEdition)' != ''">$(DefineConstants);APPSENTRY_EDITION</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
