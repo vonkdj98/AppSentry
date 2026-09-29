@@ -88,6 +88,11 @@ public sealed class DemoBackend : IMonitorBackend
     public Task<EngineSettings> GetSettingsAsync() => Task.FromResult(_settings);
     public Task SaveSettingsAsync(EngineSettings settings) { _settings = settings; return Task.CompletedTask; }
 
+    public IReadOnlyList<string> Editions => [];
+
+    public Task<System.Text.Json.JsonElement?> CallEditionAsync(string op, object? data = null) =>
+        throw new InvalidOperationException($"No edition handles '{op}' here.");
+
     public Task ClearHistoryAsync()
     {
         _events.Clear();

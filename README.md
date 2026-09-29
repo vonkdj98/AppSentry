@@ -202,6 +202,7 @@ AppSentry.Core/                     # engine, no UI
   Storage/                          # SqliteStore, LegacyImporter
   Triggers/ChangeTriggers.cs        # registry / event log / folder change notifications
   Backend/                          # IMonitorBackend, LocalBackend, PipeBackend
+  Editions/                         # extension points for add-on editions (inert in this build)
   Ipc/                              # named-pipe protocol and server
   Service/                          # Windows service host, installer, event log writer
   Uninstaller.cs

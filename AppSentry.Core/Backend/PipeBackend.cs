@@ -72,6 +72,7 @@ public sealed class PipeBackend : IMonitorBackend
             throw new InvalidOperationException($"The installed AppSentry service speaks protocol v{hello.ProtocolVersion}; this app needs v{PipeProtocol.Version}. Reinstall the service from this build.");
         CanModify = hello.CanModify;
         ClientName = hello.ClientName;
+        Editions = hello.Editions ?? [];
         SetStatus(hello.Status);
     }
 
@@ -99,6 +100,10 @@ public sealed class PipeBackend : IMonitorBackend
         await RequestAsync<EngineSettings>(PipeProtocol.Ops.GetSettings).ConfigureAwait(false) ?? new EngineSettings();
 
     public Task SaveSettingsAsync(EngineSettings settings) => RequestAsync<object>(PipeProtocol.Ops.SetSettings, settings);
+
+    public IReadOnlyList<string> Editions { get; private set; } = [];
+
+    public Task<JsonElement?> CallEditionAsync(string op, object? data = null) => RequestAsync<JsonElement?>(op, data);
 
     public void Dispose()
     {

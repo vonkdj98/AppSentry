@@ -57,6 +57,11 @@ internal sealed class FakeBackend : IMonitorBackend
     public Task SaveExclusionsAsync(List<ExclusionEntry> entries) { Exclusions = entries.ToList(); return Task.CompletedTask; }
     public Task<EngineSettings> GetSettingsAsync() => Task.FromResult(Settings);
     public Task SaveSettingsAsync(EngineSettings settings) { Settings = settings; return Task.CompletedTask; }
+
+    public IReadOnlyList<string> Editions => [];
+
+    public Task<System.Text.Json.JsonElement?> CallEditionAsync(string op, object? data = null) =>
+        throw new InvalidOperationException($"No edition handles '{op}' here.");
     public void Dispose() { }
 
     public void RaiseEvents(IReadOnlyList<ChangeEvent> events) => EventsDetected?.Invoke(this, events);

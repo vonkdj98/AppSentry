@@ -138,6 +138,8 @@ public static class Display
         DetectionSource.Store => "Microsoft Store",
         DetectionSource.Driver => "Driver",
         DetectionSource.PackageManager => "Scoop",
+        DetectionSource.Firewall => "Windows Firewall",
+        DetectionSource.Network => "Network",
         _ => source.ToString()
     };
 

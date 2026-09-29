@@ -46,4 +46,10 @@ public interface IMonitorBackend : IDisposable
     Task<EngineSettings> GetSettingsAsync();
 
     Task SaveSettingsAsync(EngineSettings settings);
+
+    /// <summary>Editions available from this backend (empty for the open-source build).</summary>
+    IReadOnlyList<string> Editions { get; }
+
+    /// <summary>Calls an edition operation; throws <see cref="InvalidOperationException"/> with the edition's error.</summary>
+    Task<System.Text.Json.JsonElement?> CallEditionAsync(string op, object? data = null);
 }

@@ -1,4 +1,5 @@
 using AppSentry.Core.Detection;
+using AppSentry.Core.Editions;
 using AppSentry.Core.Storage;
 using AppSentry.Core.Util;
 using AppSentry.Models;
@@ -94,6 +95,8 @@ public sealed partial class MonitorEngine : IDisposable
         _scanTimer = new Timer(_ => RunDueScan(), null, Timeout.Infinite, Timeout.Infinite);
         _heartbeat = new Timer(_ => Heartbeat(), null, HeartbeatPeriod, HeartbeatPeriod);
         OnStarted();
+        try { OnEditionStarted(); }
+        catch (Exception ex) { EngineLog.Error("Edition failed to start", ex); }
         RequestScan("startup", TimeSpan.Zero);
     }
 
@@ -104,6 +107,8 @@ public sealed partial class MonitorEngine : IDisposable
         _heartbeat?.Dispose();
         _scanTimer?.Dispose();
         OnStopping();
+        try { OnEditionStopping(); }
+        catch (Exception ex) { EngineLog.Error("Edition failed to stop", ex); }
         // Let an in-flight scan finish its transaction rather than tearing it down mid-write.
         if (!_idle.Wait(TimeSpan.FromSeconds(30)))
             EngineLog.Warn("Shut down while a scan was still running");
@@ -369,4 +374,39 @@ public sealed partial class MonitorEngine : IDisposable
     partial void OnStarted();
     partial void OnStopping();
     partial void OnRealtimeSettingChanged();
+
+    // ── Editions (see Editions/EditionTypes.cs) ──────────────────────────────
+
+    /// <summary>Editions compiled into this build (empty for the open-source build).</summary>
+    public IReadOnlyList<string> Editions
+    {
+        get
+        {
+            var editions = new List<string>();
+            DescribeEditions(editions);
+            return editions;
+        }
+    }
+
+    /// <summary>Routes a UI call to the edition that owns <see cref="EditionRequest.Op"/>.</summary>
+    public EditionResponse HandleEditionOp(EditionRequest request)
+    {
+        EditionResponse? response = null;
+        try
+        {
+            OnEditionOp(request, ref response);
+        }
+        catch (Exception ex)
+        {
+            EngineLog.Error($"Edition op {request.Op} failed", ex);
+            return EditionResponse.Failure(ex.Message);
+        }
+        return response ?? EditionResponse.Failure($"Unknown operation '{request.Op}'");
+    }
+
+    partial void DescribeEditions(List<string> editions);
+    partial void OnEditionStarted();
+    partial void OnEditionStopping();
+    partial void OnEditionOp(EditionRequest request, ref EditionResponse? response);
+    partial void ScanEdition(EditionScan scan);
 }

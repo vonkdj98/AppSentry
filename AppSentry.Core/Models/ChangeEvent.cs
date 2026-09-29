@@ -23,7 +23,9 @@ public enum DetectionSource
     ScheduledTask,  // Scheduled task added/removed/changed
     Store,          // Microsoft Store / MSIX package
     Driver,         // Kernel or file-system driver
-    PackageManager  // Scoop (apps that never touch the registry)
+    PackageManager, // Scoop (apps that never touch the registry)
+    Firewall,       // Windows Firewall rules and settings (reported by editions)
+    Network         // Network activity (reported by editions)
 }
 
 /// <summary>

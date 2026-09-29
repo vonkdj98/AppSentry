@@ -5,4 +5,14 @@
     <Product>AppSentry</Product>
     <Copyright>Copyright (c) 2026 vonkdj98</Copyright>
   </PropertyGroup>
+
+  <!--
+    Editions: a folder that contains this repo (for example as a git submodule) can add an
+    AppSentry.Edition.props file; it's found by searching upward from the folder above this one
+    and imported into every project. A plain clone finds nothing, which is the open-source build.
+  -->
+  <PropertyGroup>
+    <AppSentryEditionProps Condition="'$(AppSentryEditionProps)' == ''">$([MSBuild]::GetPathOfFileAbove('AppSentry.Edition.props', '$(MSBuildThisFileDirectory)..'))</AppSentryEditionProps>
+  </PropertyGroup>
+  <Import Project="$(AppSentryEditionProps)" Condition="'$(AppSentryEditionProps)' != '' And Exists('$(AppSentryEditionProps)')" />
 </Project>

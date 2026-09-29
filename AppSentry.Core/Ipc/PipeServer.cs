@@ -139,7 +139,8 @@ public sealed class PipeServer : IDisposable
                     ServiceVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "",
                     CanModify = client.IsAdmin,
                     ClientName = client.Name,
-                    Status = _engine.Status
+                    Status = _engine.Status,
+                    Editions = _engine.Editions.ToList()
                 }),
                 PipeProtocol.Ops.HistoryPage => Ok(_engine.GetHistoryPage(Arg<HistoryQuery>(request) ?? new HistoryQuery())),
                 PipeProtocol.Ops.Event => Ok(_engine.GetEvent(Arg<long>(request))),
@@ -151,7 +152,7 @@ public sealed class PipeServer : IDisposable
                 PipeProtocol.Ops.SetExclusions => Do(() => _engine.SetExclusions(Arg<List<ExclusionEntry>>(request) ?? [])),
                 PipeProtocol.Ops.GetSettings => Ok(_engine.Settings),
                 PipeProtocol.Ops.SetSettings => Do(() => _engine.UpdateSettings(Arg<EngineSettings>(request) ?? _engine.Settings)),
-                _ => Fail($"Unknown operation '{op}'")
+                _ => Edition(request, client)
             };
         }
         catch (Exception ex)
@@ -159,6 +160,13 @@ public sealed class PipeServer : IDisposable
             EngineLog.Error($"Pipe op {op} failed", ex);
             return Fail(ex.Message);
         }
+    }
+
+    /// <summary>Any other op belongs to an edition; it enforces its own admin rules via CallerIsAdmin.</summary>
+    private PipeMessage Edition(PipeMessage request, Client client)
+    {
+        var response = _engine.HandleEditionOp(new Editions.EditionRequest(request.Op!, request.Data, client.IsAdmin, client.Name));
+        return new PipeMessage { Ok = response.Ok, Data = response.Data, Error = response.Error };
     }
 
     private static T? Arg<T>(PipeMessage request) =>

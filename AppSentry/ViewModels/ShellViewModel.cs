@@ -35,7 +35,7 @@ public sealed record SourceHealthRow(string Name, string State, Tone Tone);
 /// The window's root: navigation, engine status, the master event list every page reads from,
 /// "needs a look" bookkeeping and the transient message bar.
 /// </summary>
-public sealed class ShellViewModel : ObservableObject
+public sealed partial class ShellViewModel : ObservableObject
 {
     private readonly HashSet<long> _knownIds = [];
     private NavItem _selectedNav;
@@ -57,13 +57,15 @@ public sealed class ShellViewModel : ObservableObject
         Exclusions = new ExclusionsViewModel(this);
         SettingsPage = new SettingsViewModel(this);
 
-        NavItems =
-        [
-            new NavItem("Activity", Display.Glyphs.Activity, Activity),
-            new NavItem("Installed apps", Display.Glyphs.AllApps, Installed),
-            new NavItem("Services and tasks", Display.Glyphs.Service, Persistence),
-            new NavItem("Exclusions", Display.Glyphs.Filter, Exclusions)
-        ];
+        var nav = new List<NavItem>
+        {
+            new("Activity", Display.Glyphs.Activity, Activity),
+            new("Installed apps", Display.Glyphs.AllApps, Installed),
+            new("Services and tasks", Display.Glyphs.Service, Persistence),
+            new("Exclusions", Display.Glyphs.Filter, Exclusions)
+        };
+        AddEditionPages(nav);
+        NavItems = nav;
         SettingsNav = new NavItem("Settings", Display.Glyphs.Settings, SettingsPage);
         _selectedNav = NavItems[0];
         _selectedNav.IsSelected = true;
@@ -354,4 +356,10 @@ public sealed class ShellViewModel : ObservableObject
         if (dispatcher == null || dispatcher.CheckAccess()) action(); // no UI thread (tests) or already on it
         else dispatcher.BeginInvoke(action);
     }
+
+    /// <summary>
+    /// Lets an edition add pages to the navigation (and register their view templates).
+    /// The open-source build has none. See AppSentry.Core/Editions/EditionTypes.cs.
+    /// </summary>
+    partial void AddEditionPages(List<NavItem> nav);
 }

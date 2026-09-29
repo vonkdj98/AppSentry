@@ -20,7 +20,7 @@ public sealed record Attention(AttentionLevel Level, string Reason)
 /// notification rules and the Windows event log level, so they always agree.
 /// Rules compare the before/after values the sources capture, not display strings.
 /// </summary>
-public static class AttentionClassifier
+public static partial class AttentionClassifier
 {
     private static readonly string[] SecurityProducts =
     [
@@ -31,6 +31,10 @@ public static class AttentionClassifier
 
     public static Attention Classify(ChangeEvent ev)
     {
+        Attention? fromEdition = null;
+        ClassifyEdition(ev, ref fromEdition);
+        if (fromEdition != null) return fromEdition;
+
         var app = ev.App;
         var security = IsSecurityProduct(app);
 
@@ -112,4 +116,7 @@ public static class AttentionClassifier
 
     private static bool Changed(string? before, string? after) =>
         !string.Equals((before ?? "").Trim(), (after ?? "").Trim(), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Lets an edition classify the change types it adds (null = use the rules above).</summary>
+    static partial void ClassifyEdition(ChangeEvent ev, ref Attention? result);
 }

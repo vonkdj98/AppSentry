@@ -1,3 +1,4 @@
+using AppSentry.Core.Editions;
 using AppSentry.Core.Engine;
 using AppSentry.Models;
 
@@ -58,6 +59,17 @@ public sealed class LocalBackend : IMonitorBackend
     public Task<EngineSettings> GetSettingsAsync() => Task.FromResult(_engine.Settings);
 
     public Task SaveSettingsAsync(EngineSettings settings) => Task.Run(() => _engine.UpdateSettings(settings));
+
+    public IReadOnlyList<string> Editions => _engine.Editions;
+
+    /// <summary>In-process, the signed-in user is the caller; editions check real elevation themselves.</summary>
+    public Task<System.Text.Json.JsonElement?> CallEditionAsync(string op, object? data = null) => Task.Run(() =>
+    {
+        var payload = data == null ? (System.Text.Json.JsonElement?)null : System.Text.Json.JsonSerializer.SerializeToElement(data, Util.AppJson.Options);
+        var response = _engine.HandleEditionOp(new EditionRequest(op, payload, CallerIsAdmin: true, Environment.UserName));
+        if (!response.Ok) throw new InvalidOperationException(response.Error ?? "The operation failed.");
+        return response.Data;
+    });
 
     public void Dispose() => _engine.Dispose();
 }

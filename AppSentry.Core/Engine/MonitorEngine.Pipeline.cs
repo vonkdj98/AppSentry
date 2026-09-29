@@ -1,4 +1,5 @@
 using AppSentry.Core.Detection;
+using AppSentry.Core.Editions;
 using AppSentry.Core.Sources;
 using AppSentry.Core.Storage;
 using AppSentry.Core.Util;
@@ -122,11 +123,18 @@ public sealed partial class MonitorEngine
             nextTasks = taskNext;
         });
 
+        // ── 6b. Edition sources (none in the open-source build) ───────────────
+        var edition = new EditionScan(started, health);
+        try { ScanEdition(edition); }
+        catch (Exception ex) { EngineLog.Error("Edition scan failed", ex); }
+        events.AddRange(edition.Events);
+
         // ── 7. Commit ─────────────────────────────────────────────────────────
         // Size is captured now, once; the UI never walks folders again.
         events = SizeCalculator.Fill(events, TimeSpan.FromSeconds(20));
 
         var state = new Dictionary<string, object?>();
+        foreach (var (key, value) in edition.State) Stage(state, key, value);
         Stage(state, StateKeys.Snapshot, snapshot);
         Stage(state, StateKeys.KnownScopes, diff.KnownScopes.OrderBy(s => s).ToList());
         Stage(state, StateKeys.MsiBookmark, nextBookmark);
@@ -144,6 +152,11 @@ public sealed partial class MonitorEngine
         _fsBaseline = nextFs;
         _serviceBaseline = nextServices;
         _taskBaseline = nextTasks;
+        foreach (var committed in edition.OnCommitted)
+        {
+            try { committed(); }
+            catch (Exception ex) { EngineLog.Error("Edition commit callback failed", ex); }
+        }
 
         var firstBaseline = diff.BaselinedScopes.Count > 0 && diff.BaselinedScopes.Count == diff.KnownScopes.Count;
         if (diff.BaselinedScopes.Count > 0)

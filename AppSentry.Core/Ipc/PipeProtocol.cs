@@ -7,6 +7,7 @@ namespace AppSentry.Core.Ipc;
 ///   request   { "Id": 7, "Op": "history" }                 client → service
 ///   response  { "Id": 7, "Ok": true, "Data": [...] }        service → client
 ///   push      { "Push": "events", "Data": [...] }           service → client, unsolicited
+/// Ops not listed below are passed to the edition compiled into the service, if any.
 /// </summary>
 public static class PipeProtocol
 {
@@ -55,4 +56,7 @@ public sealed record HelloResponse
     public bool CanModify { get; init; }
     public string ClientName { get; init; } = "";
     public Models.EngineStatus Status { get; init; } = new();
+
+    /// <summary>Editions compiled into the service (empty for the open-source build; missing from older services).</summary>
+    public List<string> Editions { get; init; } = [];
 }
