@@ -90,7 +90,17 @@
                             <CheckBox Content="Failed installs" IsChecked="{Binding NotifyFailed}" Margin="0,0,20,6" />
                         </WrapPanel>
                         <CheckBox Content="Always notify about changes that need a look, even if their type is off" IsChecked="{Binding AlwaysNotifyAttention}" Margin="0,6,0,0" />
-                        <CheckBox Content="Keep critical alerts on screen until I dismiss them" IsChecked="{Binding KeepCriticalOnScreen}" Margin="0,8,0,0" />
+                        <Grid Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,24,0">
+                                <TextBlock Text="Keep notifications on screen" Style="{StaticResource RowLabel}" />
+                                <TextBlock Text="They stay in Notification Center either way." Style="{StaticResource RowHint}" />
+                            </StackPanel>
+                            <ComboBox Grid.Column="1" ItemsSource="{Binding OnScreenOptions}" SelectedItem="{Binding SelectedOnScreen}" Width="240" VerticalAlignment="Center"
+                                      AutomationProperties.Name="Keep notifications on screen" />
+                        </Grid>
+                        <CheckBox Content="Keep critical alerts on screen until I dismiss them" IsChecked="{Binding KeepCriticalOnScreen}" Margin="0,8,0,0"
+                                  IsEnabled="{Binding CriticalOnScreenApplies}" />
                         <CheckBox Content="Play a sound" IsChecked="{Binding NotificationSound}" Margin="0,8,0,0" />
                     </StackPanel>
                 </StackPanel>

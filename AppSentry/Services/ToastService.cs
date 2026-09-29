@@ -10,8 +10,9 @@ namespace AppSentry.Services;
 
 /// <summary>
 /// Native Windows notifications (they respect Do Not Disturb, stay in Notification Center and
-/// have buttons). Rules: per-type switches, "needs a look" always notifies, critical items stay
-/// on screen until dismissed, pause for a while, excluded apps never notify.
+/// have buttons). Rules: per-type switches, "needs a look" always notifies, notifications stay on
+/// screen until dismissed by default (critical ones always can), pause for a while, excluded apps
+/// never notify.
 /// </summary>
 public sealed class ToastService
 {
@@ -39,6 +40,24 @@ public sealed class ToastService
         if (ev.Silent || !settings.NotificationsEnabled || settings.NotificationsPaused) return false;
         if (settings.NotifyTypes.Contains(ev.ChangeType)) return true;
         return settings.AlwaysNotifyAttention && AttentionClassifier.Classify(ev).Level >= AttentionLevel.Warning;
+    }
+
+    /// <summary>
+    /// How long a toast stays up. The reminder scenario keeps it on screen until it's clicked or
+    /// closed; Windows only honors it when the toast has at least one button, which all of ours do.
+    /// </summary>
+    public static (ToastScenario? Scenario, ToastDuration? Duration) OnScreenBehavior(UiSettings settings, bool critical)
+    {
+        if (settings.OnScreen == NotificationOnScreen.UntilDismissed || (critical && settings.KeepCriticalOnScreen))
+            return (ToastScenario.Reminder, null);
+        return settings.OnScreen == NotificationOnScreen.Long ? (null, ToastDuration.Long) : (null, null);
+    }
+
+    private static void ApplyOnScreen(ToastContentBuilder builder, UiSettings settings, bool critical)
+    {
+        var (scenario, duration) = OnScreenBehavior(settings, critical);
+        if (scenario is { } s) builder.SetToastScenario(s);
+        if (duration is { } d) builder.SetToastDuration(d);
     }
 
     public async Task ShowAsync(IReadOnlyList<ChangeEvent> events)
@@ -76,7 +95,7 @@ public sealed class ToastService
             }
 
             if (!settings.NotificationSound) builder.AddAudio(new ToastAudio { Silent = true });
-            if (critical && settings.KeepCriticalOnScreen) builder.SetToastScenario(ToastScenario.Reminder);
+            ApplyOnScreen(builder, settings, critical);
 
             builder.Show(toast =>
             {
@@ -90,14 +109,20 @@ public sealed class ToastService
         }
     }
 
+    /// <summary>Uses the same on-screen setting and sound as a real change, so it shows exactly how they'll behave.</summary>
     public void ShowTest()
     {
         try
         {
-            new ToastContentBuilder()
+            var settings = _settings();
+            var builder = new ToastContentBuilder()
+                .AddArgument("action", "view")
                 .AddText("Notifications are working")
                 .AddText("This is how AppSentry will tell you about changes.")
-                .Show();
+                .AddButton(new ToastButton().SetContent("Open AppSentry").AddArgument("action", "view"));
+            if (!settings.NotificationSound) builder.AddAudio(new ToastAudio { Silent = true });
+            ApplyOnScreen(builder, settings, critical: false);
+            builder.Show();
         }
         catch (Exception ex)
         {

@@ -44,7 +44,8 @@ The same rules set the Windows event log level (Error / Warning / Information), 
 
 ### Notifications and tray
 - **Native Windows notifications** with *View* and *Exclude* buttons; they follow Do Not Disturb and stay in Notification Center
-- Choose which change types notify; anything that needs a look can always notify; critical alerts can stay on screen until dismissed
+- Choose which change types notify; anything that needs a look can always notify
+- Notifications **stay on screen until you dismiss them** (the default, like v1), or for about 25 seconds, or for Windows' own few seconds; critical alerts can stay on screen even when the others don't
 - **Tray icon** shows state in its badge (green normally, amber when something needs a look, grey with a pause sign while notifications are paused); its menu lists the latest changes and can pause notifications for 1 hour, 4 hours or until tomorrow
 - Closing the window keeps AppSentry in the notification area (optional); **Start with Windows** opens it there quietly
 - **Exclusions**: exact names, wildcards (`7-Zip*`, `[Scheduled Task] \Adobe*`) and version-free matching, so an exclusion keeps working after the app updates. Choose "don't notify" or "don't record at all".
