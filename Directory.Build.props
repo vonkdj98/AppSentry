@@ -1,7 +1,7 @@
 <Project>
   <!-- One version for every project; shown in Settings and reported by the service over the pipe. -->
   <PropertyGroup>
-    <Version>2.0.1</Version>
+    <Version>2.0.2</Version>
     <Product>AppSentry</Product>
     <Copyright>Copyright (c) 2026 vonkdj98</Copyright>
   </PropertyGroup>
