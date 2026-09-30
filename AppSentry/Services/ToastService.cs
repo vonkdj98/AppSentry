@@ -89,9 +89,17 @@ public sealed class ToastService
             {
                 critical = toShow.Any(e => AttentionClassifier.Classify(e).Level == AttentionLevel.Critical);
                 var flagged = toShow.Count(e => AttentionClassifier.Classify(e).Level >= AttentionLevel.Warning);
+                // View opens Activity on the newest of them; the rest of the batch sits right beside it.
+                var newest = toShow.Max(e => e.Id);
+                var view = new ToastButton().SetContent("View").AddArgument("action", "view");
+                if (newest > 0)
+                {
+                    builder.AddArgument("id", newest);
+                    view.AddArgument("id", newest);
+                }
                 builder.AddText(flagged > 0 ? $"{toShow.Count} changes, {flagged} need a look" : $"{toShow.Count} changes detected")
                     .AddText(string.Join(", ", toShow.Take(3).Select(e => Display.CleanName(e.App.Name))) + (toShow.Count > 3 ? ", …" : ""))
-                    .AddButton(new ToastButton().SetContent("View").AddArgument("action", "view"));
+                    .AddButton(view);
             }
 
             if (!settings.NotificationSound) builder.AddAudio(new ToastAudio { Silent = true });

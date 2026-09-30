@@ -127,7 +127,11 @@ public partial class App : Application
     {
         if (_shell == null) return;
         ShowWindow();
-        if (id is not { } eventId) return;
+        if (id is not { } eventId)
+        {
+            _shell.SelectedNav = _shell.NavItems[0]; // Activity
+            return;
+        }
         _shell.ShowEvent(eventId);
         if (action == "exclude" && _shell.AllEvents.FirstOrDefault(e => e.Id == eventId) is { } ev)
             _ = _shell.ExcludeAsync(ev);
