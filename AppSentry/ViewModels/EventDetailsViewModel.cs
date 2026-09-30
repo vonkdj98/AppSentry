@@ -23,7 +23,7 @@ public sealed class EventDetailsViewModel : ObservableObject
         var app = ev.App;
 
         var isPersistence = ev.Source is DetectionSource.Service or DetectionSource.Driver or DetectionSource.ScheduledTask;
-        Sentence = SentenceFor(ev);
+        Sentence = SentenceFor(ev) + (item.IsGroup ? $" The same change was recorded for {item.Users}: each user profile keeps its own copy." : "");
 
         // Publisher · install technology — or the source when there's no technology to name.
         var kind = app.InstallType.Length > 0 && !app.InstallType.StartsWith("Portable", StringComparison.OrdinalIgnoreCase)
@@ -40,7 +40,7 @@ public sealed class EventDetailsViewModel : ObservableObject
         var facts = new List<Fact>
         {
             new("Changed by", ev.ChangedBy),
-            new("Installed for", isPersistence ? "" : app.InstalledFor),
+            new("Installed for", isPersistence ? "" : string.Join(", ", item.Group.Select(e => e.App.InstalledFor).Where(u => u.Length > 0))),
             new("Happened", ev.OccurredAt is { } at ? Display.LocalTime(at) : ""),
             new("Detected", Display.LocalTime(ev.DetectedAt)),
             new("Version", app.Version),
@@ -87,7 +87,7 @@ public sealed class EventDetailsViewModel : ObservableObject
         CopyRecordCommand = new RelayCommand(() => { Dialogs.CopyText(EventActions.ChangeRecordText(ev)); _shell.ShowMessage("Change record copied — paste it into the ticket"); });
         ToggleReviewedCommand = new RelayCommand(() =>
         {
-            _shell.SetReviewed([ev], !Item.IsReviewed);
+            _shell.SetReviewed(Item.Group, !Item.IsReviewed);
             OnPropertiesChanged(nameof(ReviewButtonText), nameof(AttentionBadge));
         });
     }

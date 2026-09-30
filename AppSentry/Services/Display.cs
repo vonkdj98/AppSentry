@@ -169,16 +169,17 @@ public static class Display
     }
 
     /// <summary>One line under the name in lists: what happened, compactly.</summary>
-    public static string Summary(ChangeEvent ev, Attention attention)
+    /// <summary>The row's second line. <paramref name="users"/> ("3 users (…)") stands in for the one user of a merged row.</summary>
+    public static string Summary(ChangeEvent ev, Attention attention, string users = "")
     {
-        var who = Who(ev);
-        var by = who.Length > 0 && ev.ChangeType != ChangeType.Removed ? $" · {who}" : "";
+        var who = users.Length > 0 ? users : Who(ev);
+        var by = who.Length > 0 && (ev.ChangeType != ChangeType.Removed || users.Length > 0) ? $" · {who}" : "";
         if (attention.Level >= AttentionLevel.Warning) return attention.Reason + by;
         return ev.ChangeType switch
         {
             ChangeType.Updated when !string.IsNullOrEmpty(ev.PreviousVersion) => $"{ev.PreviousVersion} → {ev.App.Version}{by}",
             ChangeType.Installed => $"Installed{Version(ev.App.Version)}{by}",
-            ChangeType.Removed => $"Removed{Version(ev.App.Version)}",
+            ChangeType.Removed => $"Removed{Version(ev.App.Version)}{(users.Length > 0 ? by : "")}",
             ChangeType.Modified => Shorten(ev.Details, 80),
             ChangeType.Failed => Shorten(ev.Details, 80),
             _ => $"{TypeLabel(ev.ChangeType)}{Version(ev.App.Version)}{by}"

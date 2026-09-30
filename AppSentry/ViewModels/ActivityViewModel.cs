@@ -23,6 +23,8 @@ public sealed class ActivityViewModel : ObservableObject, IPage
 {
     private readonly ShellViewModel _shell;
     private readonly Dictionary<long, EventItemViewModel> _cache = [];
+    private Dictionary<string, EventItemViewModel> _groupCache = [];
+    private List<EventItemViewModel> _periodRows = [];
     private readonly Debouncer _searchDebounce = new(TimeSpan.FromMilliseconds(200));
 
     private string _searchText = "";
@@ -199,15 +201,18 @@ public sealed class ActivityViewModel : ObservableObject, IPage
         var since = _range.Value is { } span ? now - span : DateTime.MinValue;
         var search = _searchText.Trim().ToLowerInvariant();
 
-        int installed = 0, updated = 0, removed = 0, needsLook = 0;
+        int installed = 0, updated = 0, removed = 0, needsLook = 0, shown = 0;
         var rows = new List<EventItemViewModel>();
-        var live = new HashSet<long>();
+        var periodRows = new List<EventItemViewModel>();
+        var liveGroups = new Dictionary<string, EventItemViewModel>();
 
-        foreach (var ev in _shell.AllEvents)
+        // One row per change: each user profile's copy of the same Store/app update is folded into one.
+        var period = _shell.AllEvents.Where(ev => ev.EffectiveTime >= since && MatchesSource(ev.Source));
+        foreach (var group in UserGroups.Group(period, Environment.UserName))
         {
-            if (ev.EffectiveTime < since || !MatchesSource(ev.Source)) continue;
-            var item = Row(ev);
-            live.Add(ev.Id);
+            var item = Row(group, liveGroups);
+            periodRows.Add(item);
+            var ev = item.Event;
 
             // Cards count the period and source, ignoring type chips and search.
             switch (ev.ChangeType)
@@ -222,7 +227,10 @@ public sealed class ActivityViewModel : ObservableObject, IPage
             if (_needsLookOnly && !item.NeedsLook) continue;
             if (search.Length > 0 && !item.SearchText.Contains(search)) continue;
             rows.Add(item);
+            shown += item.Group.Count;
         }
+        _groupCache = liveGroups;
+        _periodRows = periodRows;
 
         if (_cache.Count > _shell.AllEvents.Count)
         {
@@ -239,14 +247,14 @@ public sealed class ActivityViewModel : ObservableObject, IPage
         UpdatedCount = updated;
         RemovedCount = removed;
         NeedsLookCount = needsLook;
-        ShownCount = rows.Count;
+        ShownCount = shown; // changes, not rows, so "Showing N of M changes" adds up
 
         var view = new ListCollectionView(rows);
         view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(EventItemViewModel.DayLabel)));
         Events = view;
 
         // Keep the selection if it's still visible; otherwise pick the newest row.
-        var keep = _selected != null ? rows.FirstOrDefault(r => r.Id == _selected.Id) : null;
+        var keep = _selected != null ? rows.FirstOrDefault(r => r.Contains(_selected.Id)) : null;
         Selected = keep ?? rows.FirstOrDefault();
 
         OnPropertiesChanged(nameof(ResultText), nameof(IsEmpty), nameof(EmptyTitle), nameof(EmptyBody), nameof(HasFiltersActive), nameof(RangeLabel));
@@ -254,8 +262,8 @@ public sealed class ActivityViewModel : ObservableObject, IPage
 
     public void OnReviewedChanged()
     {
-        foreach (var item in _cache.Values) item.IsReviewed = _shell.IsReviewed(item.Event);
-        NeedsLookCount = _cache.Values.Count(i => i.NeedsLook && (_range.Value is not { } span || i.Event.EffectiveTime >= DateTime.UtcNow - span));
+        foreach (var item in _cache.Values.Concat(_groupCache.Values)) item.IsReviewed = item.Group.All(_shell.IsReviewed);
+        NeedsLookCount = _periodRows.Count(i => i.NeedsLook);
         if (_needsLookOnly) Refresh();
     }
 
@@ -263,8 +271,8 @@ public sealed class ActivityViewModel : ObservableObject, IPage
     {
         var ev = _shell.AllEvents.FirstOrDefault(e => e.Id == id);
         if (ev == null) return;
-        var item = Row(ev);
-        if (Events == null || !Events.Cast<EventItemViewModel>().Contains(item))
+        EventItemViewModel? Find() => Events?.Cast<EventItemViewModel>().FirstOrDefault(r => r.Contains(id));
+        if (Find() == null)
         {
             // Make sure it's visible: clear filters and widen the range as needed.
             _suspend = true;
@@ -273,8 +281,20 @@ public sealed class ActivityViewModel : ObservableObject, IPage
             _suspend = false;
             Refresh();
         }
+        if (Find() is not { } item) return;
         Selected = item;
         ScrollRequested?.Invoke(item);
+    }
+
+    /// <summary>A merged row, cached by its events' ids so its icon and state survive refreshes.</summary>
+    private EventItemViewModel Row(List<ChangeEvent> group, Dictionary<string, EventItemViewModel> live)
+    {
+        if (group.Count == 1) return Row(group[0]);
+        var key = string.Join(",", group.Select(e => e.Id).Order());
+        if (!_groupCache.TryGetValue(key, out var item))
+            item = new EventItemViewModel(group[0], group.All(_shell.IsReviewed), group);
+        live[key] = item;
+        return item;
     }
 
     private EventItemViewModel Row(ChangeEvent ev)

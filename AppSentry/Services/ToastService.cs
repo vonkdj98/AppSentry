@@ -65,21 +65,23 @@ public sealed class ToastService
         var settings = _settings();
         var toShow = events.Where(e => ShouldNotify(e, settings)).ToList();
         if (toShow.Count == 0) return;
+        // Each user profile's copy of the same update is one change here, as in Activity.
+        var groups = UserGroups.Group(toShow, Environment.UserName);
 
         try
         {
             var builder = new ToastContentBuilder().AddArgument("action", "view");
             var critical = false;
 
-            if (toShow.Count == 1)
+            if (groups.Count == 1)
             {
-                var ev = toShow[0];
+                var ev = groups[0][0];
                 var attention = AttentionClassifier.Classify(ev);
                 critical = attention.Level == AttentionLevel.Critical;
                 builder.AddArgument("id", ev.Id)
                     .AddText(attention.Level >= AttentionLevel.Warning ? attention.Reason : Display.NotificationTitle(ev.ChangeType))
                     .AddText($"{Display.CleanName(ev.App.Name)}{(ev.App.Version.Length > 0 ? " " + ev.App.Version : "")}")
-                    .AddText(Display.Summary(ev, Attention.None))
+                    .AddText(Display.Summary(ev, Attention.None, UserGroups.Users(groups[0])))
                     .AddButton(new ToastButton().SetContent("View").AddArgument("action", "view").AddArgument("id", ev.Id))
                     .AddButton(new ToastButton().SetContent("Exclude").AddArgument("action", "exclude").AddArgument("id", ev.Id));
                 if (await AppIconFileAsync(ev.App) is { } icon)
@@ -88,7 +90,7 @@ public sealed class ToastService
             else
             {
                 critical = toShow.Any(e => AttentionClassifier.Classify(e).Level == AttentionLevel.Critical);
-                var flagged = toShow.Count(e => AttentionClassifier.Classify(e).Level >= AttentionLevel.Warning);
+                var flagged = groups.Count(g => AttentionClassifier.Classify(g[0]).Level >= AttentionLevel.Warning);
                 // View opens Activity on the newest of them; the rest of the batch sits right beside it.
                 var newest = toShow.Max(e => e.Id);
                 var view = new ToastButton().SetContent("View").AddArgument("action", "view");
@@ -97,8 +99,9 @@ public sealed class ToastService
                     builder.AddArgument("id", newest);
                     view.AddArgument("id", newest);
                 }
-                builder.AddText(flagged > 0 ? $"{toShow.Count} changes, {flagged} need a look" : $"{toShow.Count} changes detected")
-                    .AddText(string.Join(", ", toShow.Take(3).Select(e => Display.CleanName(e.App.Name))) + (toShow.Count > 3 ? ", …" : ""))
+                var names = groups.Select(g => Display.CleanName(g[0].App.Name)).Distinct().ToList();
+                builder.AddText(flagged > 0 ? $"{groups.Count} changes, {flagged} need a look" : $"{groups.Count} changes detected")
+                    .AddText(string.Join(", ", names.Take(3)) + (names.Count > 3 ? ", …" : ""))
                     .AddButton(view);
             }
 

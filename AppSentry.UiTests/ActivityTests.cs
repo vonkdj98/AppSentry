@@ -146,4 +146,51 @@ public class ActivityTests
         Assert.True(shell.Activity.IsEmpty);
         Assert.Equal("Watching for changes", shell.Activity.EmptyTitle);
     }
+
+    private static ChangeEvent StoreUpdate(FakeBackend backend, string user, TimeSpan ago, string version = "22.2.0") =>
+        backend.Add(ChangeType.Updated, "Contoso Notes", ago, DetectionSource.Store, tweak: e => e with
+        {
+            App = e.App with { KeyPath = $@"STORE\S-1-5-21-{user.Length}\Contoso.Notes_8wekyb3d8bbwe", InstalledFor = user, Version = version, PackageFamilyName = "Contoso.Notes_8wekyb3d8bbwe" },
+            PreviousVersion = "22.1.0"
+        });
+
+    [Fact]
+    public void The_same_update_for_several_user_profiles_is_one_row_that_lists_them()
+    {
+        var backend = new FakeBackend();
+        var at = TimeSpan.FromMinutes(30);
+        var others = new[] { StoreUpdate(backend, "alex", at), StoreUpdate(backend, "sam", at + TimeSpan.FromSeconds(20)) };
+        var mine = StoreUpdate(backend, Environment.UserName, at);
+        StoreUpdate(backend, "alex", TimeSpan.FromDays(2), version: "22.1.0"); // an earlier update: its own row
+        backend.Add(ChangeType.Installed, "Zoom Workplace", TimeSpan.FromHours(1));
+        var vm = FakeBackend.Shell(backend).Activity;
+
+        var rows = vm.Events!.Cast<EventItemViewModel>().ToList();
+        Assert.Equal(3, rows.Count);
+        var merged = Assert.Single(rows, r => r.IsGroup);
+        Assert.Equal(mine.Id, merged.Id);                       // the signed-in user's copy is the one shown
+        Assert.Equal(3, merged.Group.Count);
+        Assert.Contains("3 users", merged.Subtitle);
+        Assert.Contains("alex", merged.Subtitle);
+        Assert.Equal(5, vm.ShownCount);                         // changes, not rows
+        Assert.Equal(2, vm.UpdatedCount);                       // two updates happened, not four
+
+        // Any of its events selects the merged row (a notification may point at another profile's copy).
+        vm.Select(others[1].Id);
+        Assert.Same(merged, vm.Selected);
+        Assert.Contains("alex", vm.Details!.Facts.Single(f => f.Label == "Installed for").Value);
+    }
+
+    [Fact]
+    public void Machine_wide_and_single_user_changes_are_never_merged()
+    {
+        var backend = new FakeBackend();
+        backend.Add(ChangeType.Updated, "7-Zip", TimeSpan.FromMinutes(10));
+        backend.Add(ChangeType.Updated, "7-Zip", TimeSpan.FromMinutes(10)); // e.g. 32- and 64-bit entries, both for all users
+        StoreUpdate(backend, "alex", TimeSpan.FromMinutes(10));
+        StoreUpdate(backend, "alex", TimeSpan.FromMinutes(9));             // same profile twice: not "2 users"
+        var vm = FakeBackend.Shell(backend).Activity;
+        Assert.DoesNotContain(vm.Events!.Cast<EventItemViewModel>(), r => r.IsGroup);
+        Assert.Equal(4, vm.Events!.Cast<EventItemViewModel>().Count());
+    }
 }

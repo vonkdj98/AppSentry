@@ -16,18 +16,32 @@ public sealed class EventItemViewModel : ObservableObject
     private bool _iconRequested;
     private bool _isReviewed;
 
-    public EventItemViewModel(ChangeEvent ev, bool isReviewed)
+    public EventItemViewModel(ChangeEvent ev, bool isReviewed, IReadOnlyList<ChangeEvent>? group = null)
     {
         Event = ev;
+        Group = group is { Count: > 1 } ? group : [ev];
+        Users = UserGroups.Users(Group);
         Attention = AttentionClassifier.Classify(ev);
         _isReviewed = isReviewed;
         Tone = Display.ToneFor(ev.ChangeType, Attention.Level);
         TypeBadge = new ToneBadge(Display.TypeLabel(ev.ChangeType), Display.ToneFor(ev.ChangeType, AttentionLevel.None), Display.Glyph(ev.ChangeType));
         DayLabel = Display.DayLabel(ev.EffectiveTime);
-        SearchText = $"{ev.App.Name} {ev.App.Publisher} {ev.App.Version} {ev.PreviousVersion} {ev.ChangedBy} {ev.App.InstalledFor} {ev.App.InstallType} {ev.Details} {ev.App.PackageManager}".ToLowerInvariant();
+        SearchText = $"{ev.App.Name} {ev.App.Publisher} {ev.App.Version} {ev.PreviousVersion} {ev.ChangedBy} {string.Join(" ", Group.Select(e => e.App.InstalledFor))} {ev.App.InstallType} {ev.Details} {ev.App.PackageManager}".ToLowerInvariant();
     }
 
+    /// <summary>The event shown; for a merged row, the signed-in user's copy (or the first recorded).</summary>
     public ChangeEvent Event { get; }
+
+    /// <summary>Every event the row stands for: just <see cref="Event"/>, or each profile's copy of the same change.</summary>
+    public IReadOnlyList<ChangeEvent> Group { get; }
+
+    public bool IsGroup => Group.Count > 1;
+
+    /// <summary>"3 users (…)" for a merged row; "" otherwise.</summary>
+    public string Users { get; }
+
+    public bool Contains(long id) => Group.Any(e => e.Id == id);
+
     public long Id => Event.Id;
     public Attention Attention { get; }
     public bool IsFlagged => Attention.Level >= AttentionLevel.Warning;
@@ -46,7 +60,7 @@ public sealed class EventItemViewModel : ObservableObject
     public ToneBadge? FlagBadge => NeedsLook ? new ToneBadge("Needs a look", Tone, Display.Glyphs.Warning) : null;
 
     public string Title => Display.CleanName(Event.App.Name);
-    public string Subtitle => Display.Summary(Event, Attention);
+    public string Subtitle => Display.Summary(Event, Attention, Users);
     public string Time => Display.ShortTime(Event.EffectiveTime);
     public string FullTime => Display.LocalTime(Event.EffectiveTime);
     public string DayLabel { get; }
