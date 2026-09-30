@@ -210,7 +210,21 @@ public sealed class PipeServer : IDisposable
         return security;
     }
 
+    /// <summary>
+    /// Impersonates the client only on a throwaway thread, with execution-context flow suppressed, so the
+    /// client's token can never end up on a pool thread that later writes the log/database or serves ops
+    /// (with an Identification-level token those fail with "Access is denied").
+    /// </summary>
     private static (bool IsAdmin, string Name) IdentifyClient(NamedPipeServerStream pipe)
+    {
+        (bool IsAdmin, string Name) result = (false, "unknown");
+        var thread = new Thread(() => result = IdentifyOnThisThread(pipe)) { IsBackground = true, Name = "Pipe client check" };
+        using (ExecutionContext.SuppressFlow()) thread.Start();
+        thread.Join();
+        return result;
+    }
+
+    private static (bool IsAdmin, string Name) IdentifyOnThisThread(NamedPipeServerStream pipe)
     {
         var isAdmin = false;
         var name = "unknown";
