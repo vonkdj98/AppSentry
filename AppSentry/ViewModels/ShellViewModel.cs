@@ -362,4 +362,22 @@ public sealed partial class ShellViewModel : ObservableObject
     /// The open-source build has none. See AppSentry.Core/Editions/EditionTypes.cs.
     /// </summary>
     partial void AddEditionPages(List<NavItem> nav);
+
+    /// <summary>The buttons an edition offers for this change (none in the open-source build).</summary>
+    public IReadOnlyList<EventAction> EditionActionsFor(ChangeEvent ev)
+    {
+        var actions = new List<EventAction>();
+        AddEventActions(ev, actions);
+        return actions;
+    }
+
+    /// <summary>Runs one of <see cref="EditionActionsFor"/> by its id, for a notification's button.</summary>
+    public async Task RunEditionActionAsync(string id, long eventId)
+    {
+        if (AllEvents.FirstOrDefault(e => e.Id == eventId) is not { } ev) return;
+        if (EditionActionsFor(ev).FirstOrDefault(a => a.Id == id) is { } action) await action.Run();
+    }
+
+    /// <summary>Lets an edition add buttons for a change, e.g. "Block" for a network alert.</summary>
+    partial void AddEventActions(ChangeEvent ev, List<EventAction> actions);
 }

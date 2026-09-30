@@ -9,6 +9,8 @@ namespace AppSentry.ViewModels;
 
 public sealed record Fact(string Label, string Value);
 
+public sealed record EditionActionItem(string Text, string Glyph, ICommand Command);
+
 /// <summary>The details pane for one change: what happened, why it's flagged, the diff, the facts, actions.</summary>
 public sealed class EventDetailsViewModel : ObservableObject
 {
@@ -85,6 +87,11 @@ public sealed class EventDetailsViewModel : ObservableObject
         ExcludeCommand = new AsyncCommand(() => _shell.ExcludeAsync(ev), () => _shell.CanModify);
         CopyDetailsCommand = new RelayCommand(() => { Dialogs.CopyText(EventActions.DetailsText(ev)); _shell.ShowMessage("Details copied"); });
         CopyRecordCommand = new RelayCommand(() => { Dialogs.CopyText(EventActions.ChangeRecordText(ev)); _shell.ShowMessage("Change record copied — paste it into the ticket"); });
+        EditionActions = _shell.EditionActionsFor(ev).Select(a => new EditionActionItem(a.Text, a.Glyph, new AsyncCommand(async () =>
+        {
+            try { await a.Run(); }
+            catch (Exception ex) { _shell.ShowMessage(ex.Message); }
+        }))).ToList();
         ToggleReviewedCommand = new RelayCommand(() =>
         {
             _shell.SetReviewed(Item.Group, !Item.IsReviewed);
@@ -93,6 +100,10 @@ public sealed class EventDetailsViewModel : ObservableObject
     }
 
     public EventItemViewModel Item { get; }
+
+    /// <summary>Buttons an edition adds for this change (see <see cref="ShellViewModel.EditionActionsFor"/>).</summary>
+    public IReadOnlyList<EditionActionItem> EditionActions { get; }
+    public bool HasEditionActions => EditionActions.Count > 0;
 
     public bool CanUninstall { get; }
     public bool CanOpenFolder { get; }

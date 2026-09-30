@@ -52,7 +52,7 @@ public partial class App : Application
             _window = new MainWindow(_shell);
             _window.Closing += OnWindowClosing;
 
-            Toasts = new ToastService(() => settings);
+            Toasts = new ToastService(() => settings) { EditionActions = _shell.EditionActionsFor };
             Toasts.Activated += OnToastActivated;
             _tray = new TrayService(_shell, ShowWindow, id => { ShowWindow(); _shell.ShowEvent(id); }, ExitApp);
 
@@ -132,9 +132,26 @@ public partial class App : Application
             _shell.SelectedNav = _shell.NavItems[0]; // Activity
             return;
         }
+        if (action.StartsWith("edition:", StringComparison.Ordinal))
+        {
+            _ = RunEditionActionAsync(action["edition:".Length..], eventId);
+            return;
+        }
         _shell.ShowEvent(eventId);
         if (action == "exclude" && _shell.AllEvents.FirstOrDefault(e => e.Id == eventId) is { } ev)
             _ = _shell.ExcludeAsync(ev);
+    }
+
+    private async Task RunEditionActionAsync(string id, long eventId)
+    {
+        try
+        {
+            await _shell!.RunEditionActionAsync(id, eventId);
+        }
+        catch (Exception ex)
+        {
+            _shell?.ShowMessage(ex.Message);
+        }
     }
 
     /// <summary>A second launch signals this event; bring the window up instead of starting twice.</summary>

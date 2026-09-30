@@ -32,8 +32,11 @@ public sealed class ToastService
         }
     }
 
-    /// <summary>Raised on the UI thread: ("view" | "exclude", event id or null).</summary>
+    /// <summary>Raised on the UI thread: ("view" | "exclude" | "edition:&lt;id&gt;", event id or null).</summary>
     public event Action<string, long?>? Activated;
+
+    /// <summary>An edition's buttons for a change (up to three go on its notification).</summary>
+    public Func<ChangeEvent, IReadOnlyList<ViewModels.EventAction>>? EditionActions { get; set; }
 
     public static bool ShouldNotify(ChangeEvent ev, UiSettings settings)
     {
@@ -82,8 +85,10 @@ public sealed class ToastService
                     .AddText(attention.Level >= AttentionLevel.Warning ? attention.Reason : Display.NotificationTitle(ev.ChangeType))
                     .AddText($"{Display.CleanName(ev.App.Name)}{(ev.App.Version.Length > 0 ? " " + ev.App.Version : "")}")
                     .AddText(Display.Summary(ev, Attention.None, UserGroups.Users(groups[0])))
-                    .AddButton(new ToastButton().SetContent("View").AddArgument("action", "view").AddArgument("id", ev.Id))
-                    .AddButton(new ToastButton().SetContent("Exclude").AddArgument("action", "exclude").AddArgument("id", ev.Id));
+                    .AddButton(new ToastButton().SetContent("View").AddArgument("action", "view").AddArgument("id", ev.Id));
+                foreach (var action in EditionActions?.Invoke(ev).Take(3) ?? [])
+                    builder.AddButton(new ToastButton().SetContent(action.Text).AddArgument("action", "edition:" + action.Id).AddArgument("id", ev.Id));
+                builder.AddButton(new ToastButton().SetContent("Exclude").AddArgument("action", "exclude").AddArgument("id", ev.Id));
                 if (await AppIconFileAsync(ev.App) is { } icon)
                     builder.AddAppLogoOverride(new Uri(icon), ToastGenericAppLogoCrop.Default);
             }
