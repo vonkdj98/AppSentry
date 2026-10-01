@@ -380,4 +380,10 @@ public sealed partial class ShellViewModel : ObservableObject
 
     /// <summary>Lets an edition add buttons for a change, e.g. "Block" for a network alert.</summary>
     partial void AddEventActions(ChangeEvent ev, List<EventAction> actions);
+
+    /// <summary>
+    /// Extra lines for the tray icon's tooltip, asked for every few seconds (an edition sets it; null in the
+    /// open-source build). Keep them short: Windows cuts the whole tooltip at 127 characters.
+    /// </summary>
+    public Func<Task<IReadOnlyList<string>>>? EditionTrayLines { get; set; }
 }

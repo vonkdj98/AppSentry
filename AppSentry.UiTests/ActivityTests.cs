@@ -193,4 +193,16 @@ public class ActivityTests
         Assert.DoesNotContain(vm.Events!.Cast<EventItemViewModel>(), r => r.IsGroup);
         Assert.Equal(4, vm.Events!.Cast<EventItemViewModel>().Count());
     }
+
+    [Fact]
+    public void The_tray_tooltip_lists_status_then_extra_lines_then_what_needs_a_look_within_Windows_limit()
+    {
+        Assert.Equal("AppSentry · Monitoring", AppSentry.Services.TrayService.BuildTip("Monitoring", [], 0, false));
+        Assert.Equal("AppSentry · Monitoring\n↓ 1.2 Mbps   ↑ 84 Kbps\n3 changes need a look\nNotifications paused",
+            AppSentry.Services.TrayService.BuildTip("Monitoring", ["↓ 1.2 Mbps   ↑ 84 Kbps"], 3, true));
+        Assert.Contains("1 change needs a look", AppSentry.Services.TrayService.BuildTip("Monitoring", [], 1, false));
+        var tooLong = AppSentry.Services.TrayService.BuildTip("Monitoring", [new string('x', 200)], 0, false);
+        Assert.Equal(AppSentry.Services.TrayService.MaxTip, tooLong.Length);
+        Assert.EndsWith("…", tooLong);
+    }
 }

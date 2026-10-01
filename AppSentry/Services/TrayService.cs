@@ -21,6 +21,12 @@ public sealed class TrayService : IDisposable
     private readonly TaskbarIcon _icon;
     private BrandIcon.State _state = (BrandIcon.State)(-1);
     private System.Drawing.Icon? _trayIcon;
+    private IReadOnlyList<string> _editionLines = [];
+    private readonly System.Windows.Threading.DispatcherTimer? _tipTimer;
+    private bool _fetching;
+
+    /// <summary>Windows' limit for a tray tooltip (szTip holds 128 characters with the terminator).</summary>
+    public const int MaxTip = 127;
 
     public TrayService(ShellViewModel shell, Action showWindow, Action<long> showEvent, Action exit)
     {
@@ -42,7 +48,49 @@ public sealed class TrayService : IDisposable
         };
         Refresh();
         _icon.ForceCreate(false); // false: don't put the process into Windows efficiency mode
+
+        // An edition's lines (Guard: speed in and out) change all the time; keep them fresh so hovering shows now.
+        if (_shell.EditionTrayLines != null)
+        {
+            _tipTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+            _tipTimer.Tick += async (_, _) => await RefreshEditionLinesAsync();
+            _tipTimer.Start();
+            _ = RefreshEditionLinesAsync();
+        }
     }
+
+    private async Task RefreshEditionLinesAsync()
+    {
+        if (_fetching || _shell.EditionTrayLines is not { } lines) return;
+        _fetching = true;
+        try
+        {
+            _editionLines = await lines();
+        }
+        catch (Exception)
+        {
+            _editionLines = []; // the service is restarting, or the edition isn't licensed
+        }
+        finally
+        {
+            _fetching = false;
+        }
+        UpdateTip();
+    }
+
+    /// <summary>"AppSentry · Monitoring", the edition's lines, then what needs attention; cut to Windows' limit.</summary>
+    public static string BuildTip(string status, IReadOnlyList<string> editionLines, int needsLook, bool paused)
+    {
+        var lines = new List<string> { $"AppSentry · {status}" };
+        lines.AddRange(editionLines.Where(l => l.Length > 0));
+        if (needsLook > 0) lines.Add($"{needsLook} change{(needsLook == 1 ? " needs" : "s need")} a look");
+        if (paused) lines.Add("Notifications paused");
+        var tip = string.Join("\n", lines);
+        return tip.Length <= MaxTip ? tip : tip[..(MaxTip - 1)] + "…";
+    }
+
+    private void UpdateTip() =>
+        _icon.ToolTipText = BuildTip(_shell.StatusText, _editionLines, _shell.NeedsLookCount, _shell.Settings.NotificationsPaused);
 
     /// <summary>Re-evaluates icon and tooltip; call when counts, pause or status change.</summary>
     public void Refresh()
@@ -59,11 +107,7 @@ public sealed class TrayService : IDisposable
             previous?.Dispose();
         }
 
-        var tip = "AppSentry";
-        if (needsLook > 0) tip += $" · {needsLook} need{(needsLook == 1 ? "s" : "")} a look";
-        if (paused) tip += " · notifications paused";
-        if (_shell.Status.IsScanning) tip += " · scanning";
-        _icon.ToolTipText = tip;
+        UpdateTip();
     }
 
     private void BuildMenu(ContextMenu menu)
