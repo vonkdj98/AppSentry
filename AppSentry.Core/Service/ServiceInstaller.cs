@@ -73,7 +73,7 @@ public static class ServiceInstaller
             log($"Copying AppSentry to {targetDir}…");
             try
             {
-                CopyDirectory(sourceDir, targetDir);
+                CopyDirectory(sourceDir, targetDir, log);
             }
             catch (IOException ex)
             {
@@ -140,7 +140,14 @@ public static class ServiceInstaller
         }
     }
 
-    private static void CopyDirectory(string source, string target)
+    /// <summary>
+    /// How long a locked file is waited for: a program that has only just stopped (the service finishing, or antivirus
+    /// scanning a freshly closed 70 MB exe) can keep its file open for several seconds.
+    /// </summary>
+    internal static int CopyAttempts = 30;
+    internal static TimeSpan CopyRetryDelay = TimeSpan.FromSeconds(2);
+
+    internal static void CopyDirectory(string source, string target, Action<string>? log = null)
     {
         Directory.CreateDirectory(target);
         foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
@@ -148,7 +155,19 @@ public static class ServiceInstaller
             var relative = Path.GetRelativePath(source, file);
             var destination = Path.Combine(target, relative);
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-            File.Copy(file, destination, overwrite: true);
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    File.Copy(file, destination, overwrite: true);
+                    break;
+                }
+                catch (IOException) when (attempt < CopyAttempts)
+                {
+                    if (attempt == 1) log?.Invoke($"{Path.GetFileName(destination)} is still in use; waiting for it to be released…");
+                    Thread.Sleep(CopyRetryDelay);
+                }
+            }
         }
     }
 }
