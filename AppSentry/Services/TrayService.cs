@@ -81,10 +81,25 @@ public sealed class TrayService : IDisposable
     /// <summary>"AppSentry · Monitoring", the edition's lines, then what needs attention; cut to Windows' limit.</summary>
     public static string BuildTip(string status, IReadOnlyList<string> editionLines, int needsLook, bool paused)
     {
-        var lines = new List<string> { $"AppSentry · {status}" };
-        lines.AddRange(editionLines.Where(l => l.Length > 0));
-        if (needsLook > 0) lines.Add($"{needsLook} change{(needsLook == 1 ? " needs" : "s need")} a look");
-        if (paused) lines.Add("Notifications paused");
+        // AppSentry's own lines are kept whole; an edition's lines go in between, as many as fit.
+        var head = $"AppSentry · {status}";
+        var tail = new List<string>();
+        if (needsLook > 0) tail.Add($"{needsLook} change{(needsLook == 1 ? " needs" : "s need")} a look");
+        if (paused) tail.Add("Notifications paused");
+        var lines = new List<string> { head };
+        var used = head.Length + tail.Sum(t => t.Length + 1);
+        foreach (var line in editionLines.Where(l => l.Length > 0))
+        {
+            var room = MaxTip - used - 1;
+            if (line.Length > room)
+            {
+                if (room > 1) lines.Add(line[..(room - 1)] + "…");
+                break;
+            }
+            lines.Add(line);
+            used += line.Length + 1;
+        }
+        lines.AddRange(tail);
         var tip = string.Join("\n", lines);
         return tip.Length <= MaxTip ? tip : tip[..(MaxTip - 1)] + "…";
     }
@@ -166,6 +181,7 @@ public sealed class TrayService : IDisposable
 
     public void Dispose()
     {
+        _tipTimer?.Stop();
         _icon.Dispose();
         _trayIcon?.Dispose();
     }

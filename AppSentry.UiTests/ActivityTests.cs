@@ -225,5 +225,9 @@ public class ActivityTests
         var tooLong = AppSentry.Services.TrayService.BuildTip("Monitoring", [new string('x', 200)], 0, false);
         Assert.Equal(AppSentry.Services.TrayService.MaxTip, tooLong.Length);
         Assert.EndsWith("…", tooLong);
+        // An edition's long lines give way: what needs a look is never cut off.
+        var crowded = AppSentry.Services.TrayService.BuildTip("Monitoring", [new string('x', 80), new string('y', 80)], 3, true);
+        Assert.True(crowded.Length <= AppSentry.Services.TrayService.MaxTip);
+        Assert.EndsWith("3 changes need a look\nNotifications paused", crowded);
     }
 }
