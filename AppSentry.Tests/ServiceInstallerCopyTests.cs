@@ -53,4 +53,13 @@ public class ServiceInstallerCopyTests : IDisposable
         held.Dispose();
         Assert.Equal("old", File.ReadAllText(Path.Combine(_root, "to", "AppSentry.exe")));   // nothing was half-written over it
     }
+
+    [Fact]
+    public void A_single_file_build_copies_only_its_exe_not_what_sits_beside_it()
+    {
+        File.WriteAllText(Path.Combine(_root, "from", "version.dll"), "planted");
+        ServiceInstaller.CopyDirectory(Path.Combine(_root, "from"), Path.Combine(_root, "to"), only: ["AppSentry.exe"]);
+        Assert.Equal("new", File.ReadAllText(Path.Combine(_root, "to", "AppSentry.exe")));
+        Assert.False(File.Exists(Path.Combine(_root, "to", "version.dll")));
+    }
 }

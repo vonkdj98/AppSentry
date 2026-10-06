@@ -73,7 +73,11 @@ public static class ServiceInstaller
             log($"Copying AppSentry to {targetDir}…");
             try
             {
-                CopyDirectory(sourceDir, targetDir, log);
+                // The official build is one self-contained exe: copy just that, so nothing that happens to sit beside
+                // it (a DLL planted in Downloads) ends up in Program Files, loaded by SYSTEM. A development build
+                // needs its whole folder.
+                var singleFile = string.IsNullOrEmpty(typeof(ServiceInstaller).Assembly.Location);
+                CopyDirectory(sourceDir, targetDir, log, singleFile ? [Path.GetFileName(Environment.ProcessPath!)] : null);
             }
             catch (IOException ex)
             {
@@ -166,10 +170,11 @@ public static class ServiceInstaller
     internal static int CopyAttempts = 30;
     internal static TimeSpan CopyRetryDelay = TimeSpan.FromSeconds(2);
 
-    internal static void CopyDirectory(string source, string target, Action<string>? log = null)
+    internal static void CopyDirectory(string source, string target, Action<string>? log = null, IReadOnlyCollection<string>? only = null)
     {
         Directory.CreateDirectory(target);
-        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        var files = only != null ? only.Select(name => Path.Combine(source, name)) : Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories);
+        foreach (var file in files)
         {
             var relative = Path.GetRelativePath(source, file);
             var destination = Path.Combine(target, relative);
