@@ -92,3 +92,19 @@ public class PipeTests(ITestOutputHelper output)
         Assert.Equal(1001, WindowsEventLogWriter.EventIdFor(ChangeType.Updated));
     }
 }
+
+public class PipeLineReaderTests
+{
+    [Fact]
+    public async Task Lines_are_split_on_newlines_across_reads_and_an_overlong_one_is_refused()
+    {
+        var lines = new PipeServer.LineReader(new StringReader("first\r\n" + new string('x', 40_000) + "\nlast"), maxChars: 50_000);
+        Assert.Equal("first", await lines.ReadAsync(default));
+        Assert.Equal(40_000, (await lines.ReadAsync(default))!.Length);   // longer than one 16K read
+        Assert.Equal("last", await lines.ReadAsync(default));
+        Assert.Null(await lines.ReadAsync(default));
+
+        var huge = new PipeServer.LineReader(new StringReader(new string('x', 100_000)), maxChars: 50_000);
+        await Assert.ThrowsAsync<InvalidDataException>(() => huge.ReadAsync(default));
+    }
+}
