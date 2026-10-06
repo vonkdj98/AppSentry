@@ -10,12 +10,12 @@ using AppSentry.Views;
 namespace AppSentry.Demo;
 
 /// <summary>
-/// --screenshots &lt;dir&gt; [--theme Light|Dark]: renders every page with <see cref="DemoBackend"/> data
+/// --screenshots &lt;dir&gt; [--theme Light|Dark] [--size 1280x800]: renders every page with <see cref="DemoBackend"/> data
 /// to PNGs (off-screen), then exits. Used to review the design without a person at the screen.
 /// </summary>
 public static class ScreenshotRunner
 {
-    public static int Run(string dir, string theme, bool synthetic = false)
+    public static int Run(string dir, string theme, bool synthetic = false, int width = 1360, int height = 860)
     {
         Directory.CreateDirectory(dir);
         var app = new App();
@@ -36,8 +36,8 @@ public static class ScreenshotRunner
                     WindowStartupLocation = WindowStartupLocation.Manual,
                     Left = -32000,
                     Top = 0,
-                    Width = 1360,
-                    Height = 860,
+                    Width = width,
+                    Height = height,
                     ShowInTaskbar = false,
                     ShowActivated = false
                 };

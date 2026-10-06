@@ -20,7 +20,7 @@ internal static class Program
     /// AppSentry.exe --uninstall-service   stop and remove the service; history is kept
     /// AppSentry.exe --data-dir &lt;path&gt;     monitor in-process against another folder (testing, portable use)
     /// AppSentry.exe --demo [--synthetic]  sample data, no monitoring (design review); --synthetic = no data from this PC
-    /// AppSentry.exe --screenshots &lt;dir&gt;   render every page with sample data to PNGs, then exit (--theme, --synthetic)
+    /// AppSentry.exe --screenshots &lt;dir&gt;   render every page with sample data to PNGs, then exit (--theme, --synthetic, --size 1280x800)
     /// AppSentry.exe --export-icon &lt;path&gt;  write the app icon (.ico)
     /// </summary>
     [STAThread]
@@ -41,7 +41,9 @@ internal static class Program
         if (Value(args, "--screenshots") is { } shotDir)
         {
             UiSettingsStore.InMemoryOnly = true;
-            return ScreenshotRunner.Run(Path.GetFullPath(shotDir), Value(args, "--theme") ?? "Light", Has(args, "--synthetic"));
+            var size = (Value(args, "--size") ?? "1360x860").Split('x');
+            return ScreenshotRunner.Run(Path.GetFullPath(shotDir), Value(args, "--theme") ?? "Light", Has(args, "--synthetic"),
+                int.Parse(size[0]), int.Parse(size[1]));
         }
 
         // Restarting after a service install/uninstall: wait for the old window to exit first.
