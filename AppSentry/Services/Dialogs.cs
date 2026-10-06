@@ -46,10 +46,18 @@ public static class Dialogs
         }
     }
 
-    public static void CopyText(string text)
+    /// <summary>Puts text on the clipboard; false when another program holds it (not worth a dialog, but don't say "Copied").</summary>
+    public static bool CopyText(string text)
     {
-        try { Clipboard.SetText(text); }
-        catch (Exception) { /* clipboard busy; not worth a dialog */ }
+        try
+        {
+            Clipboard.SetText(text);
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 }
 
