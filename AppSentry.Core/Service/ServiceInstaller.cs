@@ -89,6 +89,9 @@ public static class ServiceInstaller
             : Sc($"create AppSentry binPath= {binPath} start= delayed-auto DisplayName= \"AppSentry Monitor\"");
         if (!create.Succeeded) { log($"sc.exe failed: {create.StdOut}{create.StdErr}"); return create.ExitCode ?? 1; }
 
+        try { SetExtractionDir(targetDir); }
+        catch (Exception ex) { log($"Warning: could not set the service's runtime folder: {ex.Message}"); }
+
         Sc("description AppSentry \"Monitors software installs, updates, removals, services and scheduled tasks.\"");
         Sc("failure AppSentry reset= 86400 actions= restart/60000/restart/60000/restart/300000");
 
@@ -120,9 +123,25 @@ public static class ServiceInstaller
         return 0;
     }
 
+    /// <summary>
+    /// The single-file exe unpacks its native DLLs on start, by default under the account's %TEMP%: for SYSTEM that's
+    /// C:\Windows\Temp, where any user can create folders, and a DLL planted in the predictable folder would be loaded
+    /// by the service. The service unpacks into a folder under the install directory instead, which only
+    /// administrators can write.
+    /// </summary>
+    private static void SetExtractionDir(string installDir)
+    {
+        var dir = Path.Combine(installDir, "runtime");
+        Directory.CreateDirectory(dir);
+        using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey($@"SYSTEM\CurrentControlSet\Services\{AppSentryWindowsService.Name}", writable: true)
+                        ?? throw new InvalidOperationException("the service's registry key is missing");
+        key.SetValue("Environment", new[] { $"DOTNET_BUNDLE_EXTRACT_BASE_DIR={dir}" }, Microsoft.Win32.RegistryValueKind.MultiString);
+    }
+
     private static ProcessRunner.Result Sc(string arguments)
     {
-        var result = ProcessRunner.Run("sc.exe", arguments, TimeSpan.FromSeconds(60));
+        // By full path: the working directory or PATH must never supply it.
+        var result = ProcessRunner.Run(Path.Combine(Environment.SystemDirectory, "sc.exe"), arguments, TimeSpan.FromSeconds(60));
         EngineLog.Info($"sc.exe {arguments} → {result.ExitCode}");
         return result;
     }
