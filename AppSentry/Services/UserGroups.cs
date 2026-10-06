@@ -12,9 +12,17 @@ public static class UserGroups
     /// <summary>Profiles' copies are recorded by the same scan; a few minutes covers a scan that runs long.</summary>
     public static readonly TimeSpan Window = TimeSpan.FromMinutes(5);
 
+    /// <summary>A machine-wide install: one change, never a profile's copy of one, so never folded with them.</summary>
+    private const string AllUsers = "All users";
+
+    /// <summary>"alex, sam": who a row's change was made for.</summary>
+    public static string InstalledFor(IEnumerable<ChangeEvent> group) =>
+        string.Join(", ", group.Select(e => e.App.InstalledFor).Where(u => u.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase));
+
     /// <summary>What must match for two events to be the same change; null for events that are never per profile.</summary>
     public static string? Key(ChangeEvent ev) =>
-        ev.App.InstalledFor.Length == 0 || ev.Source is not (DetectionSource.Store or DetectionSource.Registry)
+        ev.App.InstalledFor.Length == 0 || ev.App.InstalledFor.Equals(AllUsers, StringComparison.OrdinalIgnoreCase) ||
+        ev.Source is not (DetectionSource.Store or DetectionSource.Registry)
             ? null
             : string.Join("|", ev.Source, ev.ChangeType, ev.App.Name, ev.App.Publisher, ev.App.Version, ev.PreviousVersion ?? "", ev.App.PackageFamilyName);
 

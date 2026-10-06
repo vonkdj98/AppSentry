@@ -76,7 +76,8 @@ public static class EventActions
     }
 
     /// <summary>A bulleted write-up ready to paste into a change ticket.</summary>
-    public static string ChangeRecordText(ChangeEvent ev)
+    /// <param name="group">For a row that folds several profiles' copies of the change: all of them, so the record names every user.</param>
+    public static string ChangeRecordText(ChangeEvent ev, IReadOnlyList<ChangeEvent>? group = null)
     {
         var attention = AttentionClassifier.Classify(ev);
         var version = ev.ChangeType == ChangeType.Updated && !string.IsNullOrEmpty(ev.PreviousVersion)
@@ -95,7 +96,7 @@ public static class EventActions
         Bullet("Publisher", ev.App.Publisher);
         Bullet("Computer", Environment.MachineName);
         Bullet("Changed by", ev.ChangedBy.Length > 0 ? ev.ChangedBy : null);
-        Bullet("Installed for", ev.App.InstalledFor);
+        Bullet("Installed for", group is { Count: > 1 } ? UserGroups.InstalledFor(group) : ev.App.InstalledFor);
         Bullet("When", Display.LocalTime(ev.EffectiveTime));
         Bullet("Detected by", $"AppSentry ({Display.SourceLabel(ev.Source)})");
         if (attention.Level >= AttentionLevel.Warning) Bullet("Flagged", attention.Reason);

@@ -42,7 +42,7 @@ public sealed class EventDetailsViewModel : ObservableObject
         var facts = new List<Fact>
         {
             new("Changed by", ev.ChangedBy),
-            new("Installed for", isPersistence ? "" : string.Join(", ", item.Group.Select(e => e.App.InstalledFor).Where(u => u.Length > 0))),
+            new("Installed for", isPersistence ? "" : UserGroups.InstalledFor(item.Group)),
             new("Happened", ev.OccurredAt is { } at ? Display.LocalTime(at) : ""),
             new("Detected", Display.LocalTime(ev.DetectedAt)),
             new("Version", app.Version),
@@ -86,7 +86,7 @@ public sealed class EventDetailsViewModel : ObservableObject
         OpenFolderCommand = new RelayCommand(() => Dialogs.OpenFolder(app.InstallLocation));
         ExcludeCommand = new AsyncCommand(() => _shell.ExcludeAsync(ev), () => _shell.CanModify);
         CopyDetailsCommand = new RelayCommand(() => { Dialogs.CopyText(EventActions.DetailsText(ev)); _shell.ShowMessage("Details copied"); });
-        CopyRecordCommand = new RelayCommand(() => { Dialogs.CopyText(EventActions.ChangeRecordText(ev)); _shell.ShowMessage("Change record copied — paste it into the ticket"); });
+        CopyRecordCommand = new RelayCommand(() => { Dialogs.CopyText(EventActions.ChangeRecordText(ev, item.Group)); _shell.ShowMessage("Change record copied — paste it into the ticket"); });
         EditionActions = _shell.EditionActionsFor(ev).Select(a => new EditionActionItem(a.Text, a.Glyph, new AsyncCommand(async () =>
         {
             try { await a.Run(); }

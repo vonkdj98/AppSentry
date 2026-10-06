@@ -206,7 +206,8 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private void RecountAttention()
     {
-        NeedsLookCount = AllEvents.Count(e => IsFlagged(e) && !IsReviewed(e));
+        // Counted as Activity shows them: one per row, however many profiles' copies it folds.
+        NeedsLookCount = UserGroups.Group(AllEvents.Where(e => IsFlagged(e) && !IsReviewed(e)), Environment.UserName).Count;
         AttentionChanged?.Invoke();
     }
 

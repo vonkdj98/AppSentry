@@ -195,6 +195,27 @@ public class ActivityTests
     }
 
     [Fact]
+    public void An_all_users_entry_is_not_merged_with_a_profiles_copy()
+    {
+        var backend = new FakeBackend();
+        StoreUpdate(backend, "All users", TimeSpan.FromMinutes(10));   // HKLM's entry for the same update
+        StoreUpdate(backend, "alex", TimeSpan.FromMinutes(10));
+        var vm = FakeBackend.Shell(backend).Activity;
+        Assert.DoesNotContain(vm.Events!.Cast<EventItemViewModel>(), r => r.IsGroup);
+    }
+
+    [Fact]
+    public void A_merged_rows_change_record_names_every_user()
+    {
+        var backend = new FakeBackend();
+        StoreUpdate(backend, "alex", TimeSpan.FromMinutes(10));
+        StoreUpdate(backend, "sam", TimeSpan.FromMinutes(10));
+        var merged = Assert.Single(FakeBackend.Shell(backend).Activity.Events!.Cast<EventItemViewModel>());
+        var record = AppSentry.Services.EventActions.ChangeRecordText(merged.Event, merged.Group);
+        Assert.Contains("Installed for: alex, sam", record);
+    }
+
+    [Fact]
     public void The_tray_tooltip_lists_status_then_extra_lines_then_what_needs_a_look_within_Windows_limit()
     {
         Assert.Equal("AppSentry · Monitoring", AppSentry.Services.TrayService.BuildTip("Monitoring", [], 0, false));
