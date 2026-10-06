@@ -61,6 +61,28 @@ public sealed partial class PackageManagerSource
 
     // ── Chocolatey ────────────────────────────────────────────────────────────
 
+    // The service reads these as SYSTEM, but standard users can create files under %ProgramData%: no DTDs (an entity
+    // bomb would hang the scan) and nothing larger than a real package's metadata.
+    private const int MaxFileBytes = 4 * 1024 * 1024;
+
+    private static string ReadSmall(string path)
+    {
+        if (new FileInfo(path).Length > MaxFileBytes) throw new InvalidDataException($"{path} is too large");
+        return File.ReadAllText(path);
+    }
+
+    private static XDocument LoadXml(string path)
+    {
+        if (new FileInfo(path).Length > MaxFileBytes) throw new InvalidDataException($"{path} is too large");
+        using var reader = System.Xml.XmlReader.Create(path, new System.Xml.XmlReaderSettings
+        {
+            DtdProcessing = System.Xml.DtdProcessing.Prohibit,
+            XmlResolver = null,
+            MaxCharactersInDocument = MaxFileBytes
+        });
+        return XDocument.Load(reader);
+    }
+
     [GeneratedRegex(@"\\Uninstall\\(?<key>[^<>""\\\r\n]+)", RegexOptions.IgnoreCase)]
     private static partial Regex UninstallKeyInText();
 
@@ -93,8 +115,15 @@ public sealed partial class PackageManagerSource
                     var registryFile = Path.Combine(dir, ".registry");
                     if (!File.Exists(registryFile)) continue;
                     var label = $"Chocolatey ({match.Groups["id"].Value})";
-                    foreach (Match key in UninstallKeyInText().Matches(File.ReadAllText(registryFile)))
-                        byKey[key.Groups["key"].Value.Trim()] = label;
+                    try
+                    {
+                        foreach (Match key in UninstallKeyInText().Matches(ReadSmall(registryFile)))
+                            byKey[key.Groups["key"].Value.Trim()] = label;
+                    }
+                    catch (Exception)
+                    {
+                        // Unreadable or oversized: skip that package.
+                    }
                 }
             }
 
@@ -105,7 +134,7 @@ public sealed partial class PackageManagerSource
                 if (!File.Exists(nuspec)) continue;
                 try
                 {
-                    var title = XDocument.Load(nuspec).Descendants().FirstOrDefault(e => e.Name.LocalName == "title")?.Value;
+                    var title = LoadXml(nuspec).Descendants().FirstOrDefault(e => e.Name.LocalName == "title")?.Value;
                     var label = $"Chocolatey ({id})";
                     byTitle[NameNormalizer.Normalize(string.IsNullOrWhiteSpace(title) ? id : title)] = label;
                 }
@@ -234,7 +263,7 @@ public sealed partial class PackageManagerSource
         string version = "", description = "", homepage = "";
         try
         {
-            using var doc = JsonDocument.Parse(File.ReadAllText(manifest));
+            using var doc = JsonDocument.Parse(ReadSmall(manifest));
             var rootElement = doc.RootElement;
             if (rootElement.TryGetProperty("version", out var v)) version = v.GetString() ?? "";
             if (rootElement.TryGetProperty("description", out var d) && d.ValueKind == JsonValueKind.String) description = d.GetString() ?? "";
@@ -251,7 +280,7 @@ public sealed partial class PackageManagerSource
             var install = Path.Combine(current, "install.json");
             if (File.Exists(install))
             {
-                using var doc = JsonDocument.Parse(File.ReadAllText(install));
+                using var doc = JsonDocument.Parse(ReadSmall(install));
                 if (doc.RootElement.TryGetProperty("bucket", out var b)) bucket = b.GetString() ?? "";
             }
         }
