@@ -76,7 +76,9 @@ public static class ServiceInstaller
                 // The official build is one self-contained exe: copy just that, so nothing that happens to sit beside
                 // it (a DLL planted in Downloads) ends up in Program Files, loaded by SYSTEM. A development build
                 // needs its whole folder.
+#pragma warning disable IL3000 // an empty Location is exactly how a single-file app is recognized
                 var singleFile = string.IsNullOrEmpty(typeof(ServiceInstaller).Assembly.Location);
+#pragma warning restore IL3000
                 CopyDirectory(sourceDir, targetDir, log, singleFile ? [Path.GetFileName(Environment.ProcessPath!)] : null);
             }
             catch (IOException ex)
