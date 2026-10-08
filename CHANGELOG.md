@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.1.2
+
+- **Installer**: upgrading, reinstalling or uninstalling while AppSentry is running no longer stalls for about five
+  minutes (twice) on PCs where Windows' automatic application shutdown is disabled by policy: the installer now stops the
+  service and closes the tray app itself before Windows Installer checks for files in use.
+
+## 2.1.1
+
+- **Filter chips**: a chip that is on shows a check mark, a mouse click no longer leaves a focus outline that looked like
+  a third state, a tooltip says what a chip does, and the line under the chips says what is filtering ("Showing 8 of 12
+  changes · only Installed, Updated").
+
 ## 2.1.0
 
 A redesign, plus the fixes since 2.0.2.
