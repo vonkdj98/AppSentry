@@ -54,6 +54,8 @@ public sealed class SettingsViewModel : ObservableObject, IPage
         TestNotificationCommand = new RelayCommand(() => ((App)Application.Current).Toasts?.ShowTest());
         ExportCommand = new RelayCommand(Export, () => _shell.AllEvents.Count > 0);
         OpenDataFolderCommand = new RelayCommand(() => Dialogs.OpenFolder(DataDir), () => Directory.Exists(DataDir));
+        CopySupportInfoCommand = new RelayCommand(() =>
+            _shell.ShowMessage(Dialogs.CopyText(SupportInfo()) ? "Support info copied: paste it into your message" : "Couldn't copy: another program is using the clipboard"));
         OpenLogCommand = new RelayCommand(() => Dialogs.OpenFolder(Path.Combine(DataDir, "engine.log")), () => File.Exists(Path.Combine(DataDir, "engine.log")));
         ClearHistoryCommand = new AsyncCommand(ClearHistoryAsync, () => _shell.CanModify && _shell.AllEvents.Count > 0);
     }
@@ -286,6 +288,32 @@ public sealed class SettingsViewModel : ObservableObject, IPage
 
     public string VersionText => $"AppSentry {Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)} · {_shell.ModeLabel}";
 
+    // ── About ─────────────────────────────────────────────────────────────────
+
+    public string AboutVersion => $"Version {Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)}";
+
+    public string AboutDetail => string.Join(" · ", new[] { _shell.ModeLabel, _shell.Backend.Editions.Count > 0 ? "Includes " + string.Join(", ", _shell.Backend.Editions.Select(EditionName)) : "" }
+        .Where(t => t.Length > 0));
+
+    private static string EditionName(string id) => id.Length == 0 ? id : char.ToUpperInvariant(id[0]) + id[1..];
+
+    /// <summary>What someone helping with a problem needs, and nothing about the user: no names, paths or history.</summary>
+    internal string SupportInfo()
+    {
+        var status = _shell.Status;
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"AppSentry {Assembly.GetExecutingAssembly().GetName().Version}");
+        sb.AppendLine($"Mode: {_shell.ModeLabel}");
+        sb.AppendLine($"Editions: {(_shell.Backend.Editions.Count > 0 ? string.Join(", ", _shell.Backend.Editions) : "none")}");
+        sb.AppendLine($"Windows: {Environment.OSVersion.Version} ({(Environment.Is64BitOperatingSystem ? "64" : "32")}-bit)");
+        sb.AppendLine($"Runtime: {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}");
+        sb.AppendLine($"Tracked apps: {status.TrackedApps:N0}");
+        sb.AppendLine($"Last scan: {(status.LastScanUtc is { } at ? $"{at:u} ({status.LastScanSeconds:0.0} s)" : "none yet")}");
+        if (!string.IsNullOrEmpty(status.LastError)) sb.AppendLine($"Last error: {status.LastError}");
+        foreach (var (source, state) in status.Sources.OrderBy(x => x.Key)) sb.AppendLine($"  {source}: {state}");
+        return sb.ToString();
+    }
+
     private void Export()
     {
         var path = Dialogs.SaveFile("Export history", "CSV files (*.csv)|*.csv", $"AppSentry_{Environment.MachineName}_{DateTime.Now:yyyyMMdd_HHmm}.csv");
@@ -321,5 +349,6 @@ public sealed class SettingsViewModel : ObservableObject, IPage
     public ICommand ExportCommand { get; }
     public ICommand OpenDataFolderCommand { get; }
     public ICommand OpenLogCommand { get; }
+    public ICommand CopySupportInfoCommand { get; }
     public ICommand ClearHistoryCommand { get; }
 }

@@ -68,6 +68,31 @@ public static class BrandTheme
         Brush("AccentButtonForegroundPointerOver", p.OnFill);
         Brush("AccentButtonForegroundPressed", p.OnFill);
         Brush("AccentButtonBorderBrush", p.Fill);
+        // Check boxes, radio buttons, text-box focus lines and links draw their "on" state from the same accent.
+        foreach (var state in new[] { "Checked", "Indeterminate" })
+        {
+            Brush($"CheckBoxCheckBackgroundFill{state}", p.Fill);
+            Brush($"CheckBoxCheckBackgroundFill{state}PointerOver", p.FillHover);
+            Brush($"CheckBoxCheckBackgroundFill{state}Pressed", p.FillPressed);
+            Brush($"CheckBoxCheckBackgroundStroke{state}", p.Fill);
+            Brush($"CheckBoxCheckBackgroundStroke{state}PointerOver", p.FillHover);
+            Brush($"CheckBoxCheckBackgroundStroke{state}Pressed", p.FillPressed);
+        }
+        Brush("CheckBoxCheckGlyphForeground", p.OnFill);
+        Brush("CheckBoxCheckGlyphForegroundPressed", p.OnFill);
+        Brush("RadioButtonOuterEllipseCheckedFill", p.Fill);
+        Brush("RadioButtonOuterEllipseCheckedStroke", p.Fill);
+        Brush("RadioButtonOuterEllipseCheckedStrokePointerOver", p.FillHover);
+        Brush("RadioButtonCheckOuterEllipseCheckedFillPointerOver", p.FillHover);
+        Brush("RadioButtonCheckOuterEllipseCheckedFillPressed", p.FillPressed);
+        Brush("RadioButtonCheckOuterEllipseCheckedStrokePressed", p.FillPressed);
+        Brush("TextControlFocusedBorderBrush", p.Fill);
+        Brush("ComboBoxBorderBrushFocused", p.Fill);
+        Brush("ControlFocusedBorderBrush", p.Fill);
+        Brush("HyperlinkButtonForeground", p.Text);
+        Brush("HyperlinkButtonForegroundPointerOver", p.TextSecondary);
+        Brush("HyperlinkButtonForegroundPressed", p.TextTertiary);
+        Brush("ProgressBarForeground", p.Fill);
     }
 
     private static Color Rgb(byte r, byte g, byte b) => Color.FromRgb(r, g, b);

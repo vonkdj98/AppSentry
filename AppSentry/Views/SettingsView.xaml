@@ -163,7 +163,21 @@
                 </StackPanel>
             </Border>
 
-            <TextBlock Text="{Binding VersionText}" Style="{StaticResource Caption}" Margin="0,16,0,0" />
+            <!-- About -->
+            <TextBlock Text="About" Style="{StaticResource SectionHeader}" />
+            <Border Style="{StaticResource Card}">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Command="{Binding CopySupportInfoCommand}" Tag="&#xE8C8;" ContentTemplate="{StaticResource GlyphLabel}"
+                            Content="Copy support info" VerticalAlignment="Center" Margin="16,0,0,0"
+                            ToolTip="Version, Windows version and scan status: nothing about you or your apps" />
+                    <Image x:Name="AboutLogo" DockPanel.Dock="Left" Width="40" Height="40" Margin="0,0,14,0" VerticalAlignment="Center" />
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="AppSentry" Style="{StaticResource Body}" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding AboutVersion}" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                        <TextBlock Text="{Binding AboutDetail}" Style="{StaticResource Caption}" Margin="0,1,0,0" />
+                    </StackPanel>
+                </DockPanel>
+            </Border>
         </StackPanel>
     </ScrollViewer>
 </UserControl>
