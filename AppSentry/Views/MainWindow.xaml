@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:AppSentry.ViewModels"
         xmlns:v="clr-namespace:AppSentry.Views"
-        Title="AppSentry" Width="1280" Height="800" MinWidth="960" MinHeight="600"
+        Title="AppSentry" Width="1360" Height="800" MinWidth="1200" MinHeight="600"
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <DataTemplate DataType="{x:Type vm:ActivityViewModel}"><v:ActivityView /></DataTemplate>
@@ -17,7 +17,18 @@
                          Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                          CommandParameter="{Binding}" AutomationProperties.Name="{Binding Title}">
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock Style="{StaticResource Glyph}" Text="{Binding Glyph}" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,12,0" />
+                    <TextBlock Text="{Binding Glyph}" Margin="0,0,12,0">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource Glyph}">
+                                <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                        <Setter Property="Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                     <TextBlock Text="{Binding Title}" FontSize="14" VerticalAlignment="Center" />
                 </StackPanel>
             </RadioButton>

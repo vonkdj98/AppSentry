@@ -16,7 +16,16 @@ public partial class MainWindow : Window
         DataContext = shell;
         Icon = BrandIcon.Render(32);
         BrandImage.Source = BrandIcon.Render(48);
+        FitToScreen();
         ApplySavedBounds(shell.Settings);
+    }
+
+    /// <summary>The default size is for a roomy screen; on a small one (a 1366x768 laptop) the window stays inside it.</summary>
+    private void FitToScreen()
+    {
+        var area = SystemParameters.WorkArea;
+        Width = Math.Max(MinWidth, Math.Min(Width, area.Width * 0.96));
+        Height = Math.Max(MinHeight, Math.Min(Height, area.Height * 0.96));
     }
 
     /// <summary>Screenshot mode renders the client area without Mica, so give it a solid base.</summary>

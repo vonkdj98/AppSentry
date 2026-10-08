@@ -1,0 +1,19 @@
+<UserControl x:Class="AppSentry.Infrastructure.SearchBox"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:infra="clr-namespace:AppSentry.Infrastructure"
+             x:Name="Root" Focusable="False">
+    <Grid>
+        <TextBox x:Name="Box" Padding="32,6,30,6" AutomationProperties.Name="{Binding Label, ElementName=Root}"
+                 Text="{Binding Text, ElementName=Root, UpdateSourceTrigger=PropertyChanged}" />
+        <TextBlock Style="{StaticResource Glyph}" Text="&#xE721;" FontSize="13" Margin="11,0,0,0" HorizontalAlignment="Left" IsHitTestVisible="False" />
+        <TextBlock Text="{Binding Placeholder, ElementName=Root}" Style="{StaticResource Caption}" Margin="32,0,30,0" VerticalAlignment="Center" IsHitTestVisible="False"
+                   Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                   Visibility="{Binding Text, ElementName=Root, Converter={StaticResource NullToVisibility}, ConverterParameter=invert}" />
+        <Button Style="{StaticResource SubtleButton}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0" Padding="6,4"
+                Click="Clear_Click" AutomationProperties.Name="Clear search" ToolTip="Clear"
+                Visibility="{Binding Text, ElementName=Root, Converter={StaticResource NullToVisibility}}">
+            <TextBlock Style="{StaticResource Glyph}" Text="&#xE711;" FontSize="10" />
+        </Button>
+    </Grid>
+</UserControl>

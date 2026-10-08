@@ -131,8 +131,9 @@
                                     <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
                                 </Trigger>
                                 <Trigger Property="IsChecked" Value="True">
-                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SystemFillColorAttentionBackgroundBrush}" />
                                     <Setter TargetName="Indicator" Property="Visibility" Value="Visible" />
+                                    <Setter Property="FontWeight" Value="SemiBold" />
                                 </Trigger>
                                 <Trigger Property="IsKeyboardFocused" Value="True">
                                     <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />

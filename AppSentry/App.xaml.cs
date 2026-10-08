@@ -30,7 +30,21 @@ public partial class App : Application
             "Dark" => ThemeMode.Dark,
             _ => ThemeMode.System
         };
+        BrandTheme.Apply(this, theme);
+        // Following Windows: switch the accent set too when the PC's light/dark choice changes.
+        if (_themeWatch != null) Microsoft.Win32.SystemEvents.UserPreferenceChanged -= _themeWatch;
+        _themeWatch = null;
+        if (theme is not ("Light" or "Dark"))
+        {
+            _themeWatch = (_, e) =>
+            {
+                if (e.Category == Microsoft.Win32.UserPreferenceCategory.General) Dispatcher.BeginInvoke(() => BrandTheme.Apply(this, theme));
+            };
+            Microsoft.Win32.SystemEvents.UserPreferenceChanged += _themeWatch;
+        }
     }
+
+    private Microsoft.Win32.UserPreferenceChangedEventHandler? _themeWatch;
 
     public int RunTray(IMonitorBackend backend, bool startMinimized, EventWaitHandle? showSignal)
     {
