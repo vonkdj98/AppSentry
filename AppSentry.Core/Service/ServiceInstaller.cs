@@ -17,7 +17,8 @@ public static class ServiceInstaller
     public static bool IsElevated()
     {
         using var identity = WindowsIdentity.GetCurrent();
-        return new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
+        // SYSTEM (an installer's custom action) counts: it can do everything an administrator can.
+        return identity.IsSystem || new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
     }
 
     public static ServiceControllerStatus? GetStatus()

@@ -3,6 +3,7 @@ using System.ServiceProcess;
 using System.Windows;
 using AppSentry.Core.Backend;
 using AppSentry.Core.Service;
+using AppSentry.Core.Util;
 using AppSentry.Demo;
 using AppSentry.Services;
 
@@ -96,8 +97,11 @@ internal static class Program
 
         var lines = new List<string>();
         var code = command(lines.Add);
-        MessageBox.Show(string.Join(Environment.NewLine, lines), "AppSentry service",
-            MessageBoxButton.OK, code == 0 ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        foreach (var line in lines) EngineLog.Info($"{argument}: {line}");
+        // --quiet: from an installer or a script, which has no one to click OK; the exit code and the engine log tell.
+        if (!Has(Environment.GetCommandLineArgs(), "--quiet"))
+            MessageBox.Show(string.Join(Environment.NewLine, lines), "AppSentry service",
+                MessageBoxButton.OK, code == 0 ? MessageBoxImage.Information : MessageBoxImage.Warning);
         return code;
     }
 }
