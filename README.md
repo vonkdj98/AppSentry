@@ -26,7 +26,7 @@ The exe isn't code-signed yet, so Windows SmartScreen may warn the first time; c
 - Install **size** and the time the change **actually happened** are captured when it's detected
 
 ### User Interface
-- Windows 11 **Fluent** look (WPF, .NET 9 Fluent theme): Mica, rounded corners, your accent color, light/dark following Windows or chosen in Settings
+- Windows 11 **Fluent** look (WPF, .NET 9 Fluent theme): Mica, rounded corners, AppSentry's own indigo accent, light/dark following Windows or chosen in Settings; apps without an icon get a colored letter tile
 - **Activity**: changes grouped by day, with real app icons, summary cards for the chosen period, filter chips (type, source, time range, "needs a look") and search
 - **Details pane** beside the list: what happened in one sentence, who did it, the before/after values that changed, and actions — open folder, uninstall, exclude, copy details, **copy as change record** (a bulleted write-up for a change ticket)
 - **Installed apps**: every app with its icon, size bar, install date and scope filters (machine-wide, per-user, Store, Scoop), plus each app's own change history
