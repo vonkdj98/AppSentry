@@ -21,7 +21,7 @@ public static class BrandTheme
         Tint: Rgb(0xE8, 0xEB, 0xFC));
 
     private static readonly Palette DarkPalette = new(
-        Fill: Rgb(0x5A, 0x6B, 0xEA), FillHover: Rgb(0x6A, 0x7A, 0xF0), FillPressed: Rgb(0x4A, 0x5B, 0xDB), FillDisabled: Rgb(0x5C, 0x5C, 0x5C),
+        Fill: Rgb(0x52, 0x62, 0xE4), FillHover: Rgb(0x4A, 0x59, 0xD6), FillPressed: Rgb(0x42, 0x50, 0xC4), FillDisabled: Rgb(0x5C, 0x5C, 0x5C),
         Text: Rgb(0xA5, 0xB4, 0xFF), TextSecondary: Rgb(0xB8, 0xC4, 0xFF), TextTertiary: Rgb(0x8E, 0x9F, 0xF5), OnFill: Colors.White,
         Tint: Rgb(0x25, 0x2A, 0x4F));
 
@@ -35,10 +35,32 @@ public static class BrandTheme
         _ => SystemUsesDarkApps()
     };
 
+    /// <summary>For tests: the accent fills (with the text on them) and the accent text, per theme.</summary>
+    internal static (Color Fill, Color FillHover, Color FillPressed, Color OnFill, Color Text) AccentColors(bool dark)
+    {
+        var p = dark ? DarkPalette : LightPalette;
+        return (p.Fill, p.FillHover, p.FillPressed, p.OnFill, p.Text);
+    }
+
+    /// <summary>WCAG contrast ratio between two colors (1 to 21).</summary>
+    internal static double Contrast(Color a, Color b)
+    {
+        static double Channel(byte v)
+        {
+            var c = v / 255.0;
+            return c <= 0.03928 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
+        }
+        static double Luminance(Color c) => 0.2126 * Channel(c.R) + 0.7152 * Channel(c.G) + 0.0722 * Channel(c.B);
+        double la = Luminance(a), lb = Luminance(b);
+        return (Math.Max(la, lb) + 0.05) / (Math.Min(la, lb) + 0.05);
+    }
+
     /// <summary>Puts the brand's accent into the application's resources (they win over the Fluent theme's).</summary>
     public static void Apply(Application app, string theme)
     {
         Dark = IsDark(theme);
+        // A Windows high-contrast theme chooses its own colors for a reason: leave them alone.
+        if (SystemParameters.HighContrast) return;
         var p = Dark ? DarkPalette : LightPalette;
         void Brush(string key, Color color)
         {

@@ -32,4 +32,8 @@
     <ProjectReference Include="..\AppSentry.Core\AppSentry.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="AppSentry.UiTests" />
+  </ItemGroup>
+
 </Project>
