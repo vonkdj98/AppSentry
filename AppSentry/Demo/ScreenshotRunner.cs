@@ -60,6 +60,12 @@ public static class ScreenshotRunner
                 if (update != null) shell.Activity.Select(update.Id);
                 await Shot("activity-update");
 
+                // Filter chips on, so the shot shows what "on" looks like and what the count line says.
+                shell.Activity.FilterInstalled = true;
+                shell.Activity.FilterUpdated = true;
+                await Shot("activity-filtered");
+                shell.Activity.FilterInstalled = shell.Activity.FilterUpdated = false;
+
                 shell.SelectedNav = shell.NavItems.First(n => n.Page == shell.Installed);
                 await Settle();
                 shell.Installed.SelectedSort = shell.Installed.SortOptions[1]; // by size shows the bars

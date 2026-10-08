@@ -177,6 +177,10 @@ public sealed class ActivityViewModel : ObservableObject, IPage
         {
             if (_shell.AllEvents.Count == 0) return _shell.IsLoadingHistory ? "Loading history…" : "";
             var text = ShownCount == _shell.AllEvents.Count ? $"{ShownCount:N0} changes" : $"Showing {ShownCount:N0} of {_shell.AllEvents.Count:N0} changes";
+            // Say what the highlighted chips are doing, so a filter that's on can't go unnoticed.
+            var types = new[] { (FilterInstalled, "Installed"), (FilterUpdated, "Updated"), (FilterRemoved, "Removed"), (FilterModified, "Modified"), (FilterFailed, "Failed") }
+                .Where(t => t.Item1).Select(t => t.Item2).ToList();
+            if (types.Count > 0) text += $" · only {string.Join(", ", types)}";
             return _shell.IsLoadingHistory
                 ? $"{text} · loading older changes ({_shell.AllEvents.Count:N0} of {_shell.TotalHistoryCount:N0})"
                 : text;

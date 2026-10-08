@@ -22,6 +22,19 @@ public partial class App : Application
 
     public ToastService? Toasts { get; private set; }
 
+    static App()
+    {
+        // A chip you click with the mouse keeps keyboard focus, and its focus outline then looked like a third state
+        // (on, off, on-with-an-outline). Clicking hands focus back to the window; Tab and Space still work.
+        EventManager.RegisterClassHandler(typeof(System.Windows.Controls.Primitives.ToggleButton), UIElement.PreviewMouseLeftButtonUpEvent,
+            new System.Windows.Input.MouseButtonEventHandler((sender, _) =>
+            {
+                if (sender is System.Windows.Controls.Primitives.ToggleButton { Template: var t } button &&
+                    ReferenceEquals(t, Application.Current?.TryFindResource("ChipTemplate")))
+                    button.Dispatcher.BeginInvoke(() => System.Windows.Input.Keyboard.ClearFocus(), System.Windows.Threading.DispatcherPriority.Input);
+            }));
+    }
+
     public void ApplyTheme(string theme)
     {
         ThemeMode = theme switch
