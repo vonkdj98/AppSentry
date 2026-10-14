@@ -63,8 +63,14 @@ public partial class App : Application
     {
         _backend = backend;
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        TrayLog.Write($"Tray app starting: version {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version}, {backend.Mode} mode, minimized={startMinimized}");
+        Exit += (_, e) => TrayLog.Write($"Tray app exited with code {e.ApplicationExitCode}");
+        SessionEnding += (_, e) => TrayLog.Write($"Windows session ending ({e.ReasonSessionEnding})");
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => TrayLog.Write($"UNHANDLED exception (terminating={e.IsTerminating}): {e.ExceptionObject}");
+        TaskScheduler.UnobservedTaskException += (_, e) => TrayLog.Write($"Unobserved task exception: {e.Exception}");
         DispatcherUnhandledException += (_, e) =>
         {
+            TrayLog.Write($"Unhandled UI exception: {e.Exception}");
             EngineLog.Error("Unhandled UI exception", e.Exception);
             Dialogs.ShowError("AppSentry", $"Something went wrong: {e.Exception.Message}");
             e.Handled = true;
@@ -121,6 +127,7 @@ public partial class App : Application
 
     public void ExitApp()
     {
+        TrayLog.Write($"Exiting (asked by: {TrayLog.Caller()})");
         _exiting = true;
         _window?.SaveBounds();
         _tray?.Dispose();
@@ -133,6 +140,7 @@ public partial class App : Application
     {
         if (_exiting || _shell == null) return;
         _window!.SaveBounds();
+        TrayLog.Write($"Window closing ({(_shell.Settings.CloseToTray ? "hiding to the tray; the app keeps running" : "close to tray is off, so the app exits")}); caller: {TrayLog.Caller()}");
         if (!_shell.Settings.CloseToTray)
         {
             e.Cancel = true;

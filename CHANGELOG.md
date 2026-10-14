@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.1.4
+
+- **Installer**: an upgrade no longer stalls for several minutes. Where Group Policy turns off automatic application
+  shutdown (common on managed PCs), Windows Installer scans every running program for files it is about to replace with
+  an old, slow method, which took 3 to 5 minutes of CPU on a test PC. The installer now stops the service and closes the
+  tray app, then moves the old files aside before that check (they are deleted when the install succeeds and put back if
+  it fails), so an upgrade takes about 10 seconds. Fresh installs and uninstalls were already quick. Upgrading from 2.1.3
+  or earlier can still wait: those packages do not have this.
+
+## 2.1.3
+
+- **Diagnostics**: the tray app now keeps its own small log (`%LOCALAPPDATA%\AppSentry	ray.log`): when it starts, why
+  its window hides or the app exits, Windows sign-out, and any exception nothing handled. When the tray app talked to the
+  service it wrote no log at all, so an app that closed by itself left no trace.
+
 ## 2.1.2
 
 - **Installer**: upgrading, reinstalling or uninstalling while AppSentry is running no longer stalls for about five
