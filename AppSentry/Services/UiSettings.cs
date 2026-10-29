@@ -34,6 +34,9 @@ public sealed class UiSettings
 
     public bool CloseToTray { get; set; } = true;
 
+    /// <summary>This user's choice when the installer's sign-in task starts the app (see StartupRegistration).</summary>
+    public bool StartWithWindows { get; set; } = true;
+
     public bool CloseToTrayTipShown { get; set; }
 
     /// <summary>Attention items this user has marked as reviewed (they stop counting toward "Needs a look").</summary>

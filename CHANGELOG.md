@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.5
+
+- **Starts at sign-in again**: the installer now registers a Task Scheduler task that starts the tray app for each
+  user who signs in, in place of the per-user Run key. On a test PC Explorer never ran that entry, so after every
+  restart the app stayed off until opened by hand. "Start with Windows" in Settings is now a per-user choice the task
+  respects, and the old Run entry is removed so the app can't start twice. Uninstalling removes the task.
+- A second copy started at sign-in no longer pops the window open; it just exits.
+
 ## 2.1.4
 
 - **Installer**: an upgrade no longer stalls for several minutes. Where Group Policy turns off automatic application

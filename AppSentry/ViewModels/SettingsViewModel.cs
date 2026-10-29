@@ -265,10 +265,14 @@ public sealed class SettingsViewModel : ObservableObject, IPage
 
     public bool StartWithWindows
     {
-        get => StartupRegistration.IsEnabled;
+        get => StartupRegistration.IsEnabled(_shell.Settings);
         set
         {
-            try { StartupRegistration.Set(value); }
+            try
+            {
+                StartupRegistration.Set(value, _shell.Settings);
+                _shell.SaveSettings();
+            }
             catch (Exception ex) { _shell.ShowMessage($"Couldn't change startup: {ex.Message}"); }
             OnPropertyChanged();
         }

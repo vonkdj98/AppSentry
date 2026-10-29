@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using AppSentry.Core.Service;
 using Microsoft.Win32;
 
 namespace AppSentry.Services;
@@ -61,13 +62,51 @@ public static class Dialogs
     }
 }
 
-/// <summary>"Start with Windows": the per-user Run key, pointing at this exe with --minimized.</summary>
+/// <summary>
+/// "Start with Windows". Installed by the installer, the sign-in task starts the app for everyone and each user's
+/// choice is a setting the app checks when the task starts it. Without the task (a copy run from a folder), the
+/// per-user Run key, pointing at this exe with --minimized.
+/// </summary>
 public static class StartupRegistration
 {
     private const string RunKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
     private const string ValueName = "AppSentry";
 
-    public static bool IsEnabled
+    public static bool IsEnabled(UiSettings settings) => TrayAutostart.IsRegistered ? settings.StartWithWindows : HasRunEntry;
+
+    public static void Set(bool enabled, UiSettings settings)
+    {
+        if (TrayAutostart.IsRegistered)
+        {
+            settings.StartWithWindows = enabled;
+            RemoveLegacyEntry();
+            return;
+        }
+        using var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true)
+                        ?? throw new InvalidOperationException("The Run key isn't writable.");
+        if (enabled) key.SetValue(ValueName, $"\"{Environment.ProcessPath}\" --minimized");
+        else key.DeleteValue(ValueName, throwOnMissingValue: false);
+    }
+
+    /// <summary>Whether the sign-in task should go ahead for this user.</summary>
+    public static bool WantedByThisUser() => UiSettingsStore.Load().StartWithWindows;
+
+    /// <summary>Once the sign-in task exists, the old Run entry would only start a second copy.</summary>
+    public static void RemoveLegacyEntry()
+    {
+        if (!TrayAutostart.IsRegistered) return;
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
+            key?.DeleteValue(ValueName, throwOnMissingValue: false);
+        }
+        catch (Exception)
+        {
+            // Harmless if it stays: the second copy exits on the single-instance check.
+        }
+    }
+
+    private static bool HasRunEntry
     {
         get
         {
@@ -78,13 +117,5 @@ public static class StartupRegistration
             }
             catch { return false; }
         }
-    }
-
-    public static void Set(bool enabled)
-    {
-        using var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true)
-                        ?? throw new InvalidOperationException("The Run key isn't writable.");
-        if (enabled) key.SetValue(ValueName, $"\"{Environment.ProcessPath}\" --minimized");
-        else key.DeleteValue(ValueName, throwOnMissingValue: false);
     }
 }

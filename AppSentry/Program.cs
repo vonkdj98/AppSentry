@@ -15,10 +15,13 @@ internal static class Program
 
     /// <summary>
     /// AppSentry.exe                       tray app (connects to the service if it's running, else monitors in-process)
-    /// AppSentry.exe --minimized           same, starting hidden in the tray (used by "Start with Windows")
+    /// AppSentry.exe --minimized           same, starting hidden in the tray
+    /// AppSentry.exe --autostart           same, from the sign-in task; exits at once if this user turned "Start with Windows" off
     /// AppSentry.exe --service             run as the Windows service (started by the Service Control Manager)
     /// AppSentry.exe --install-service     copy to Program Files, register and start the service (UAC prompt)
     /// AppSentry.exe --uninstall-service   stop and remove the service; history is kept
+    /// AppSentry.exe --register-autostart  start the tray app at every user's sign-in (installer; elevated)
+    /// AppSentry.exe --unregister-autostart  undo that
     /// AppSentry.exe --data-dir &lt;path&gt;     monitor in-process against another folder (testing, portable use)
     /// AppSentry.exe --demo [--synthetic]  sample data, no monitoring (design review); --synthetic = no data from this PC
     /// AppSentry.exe --screenshots &lt;dir&gt;   render every page with sample data to PNGs, then exit (--theme, --synthetic, --size 1280x800)
@@ -34,6 +37,8 @@ internal static class Program
         }
         if (Has(args, "--install-service")) return RunServiceCommand("--install-service", ServiceInstaller.Install);
         if (Has(args, "--uninstall-service")) return RunServiceCommand("--uninstall-service", ServiceInstaller.Uninstall);
+        if (Has(args, "--register-autostart")) return RunServiceCommand("--register-autostart", TrayAutostart.Register);
+        if (Has(args, "--unregister-autostart")) return RunServiceCommand("--unregister-autostart", TrayAutostart.Unregister);
         if (Value(args, "--export-icon") is { } iconPath)
         {
             BrandIcon.WriteIco(Path.GetFullPath(iconPath));
@@ -54,6 +59,10 @@ internal static class Program
             catch (ArgumentException) { } // already gone
         }
 
+        var autostart = Has(args, TrayAutostart.Argument);
+        if (autostart && !StartupRegistration.WantedByThisUser()) return 0;
+        var minimized = autostart || Has(args, "--minimized");
+
         var demo = Has(args, "--demo");
         UiSettingsStore.InMemoryOnly = demo;
         var dataDir = Value(args, "--data-dir") is { } d ? Path.GetFullPath(d) : null;
@@ -67,9 +76,11 @@ internal static class Program
         using var showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, "AppSentry_Show" + suffix);
         if (!createdNew)
         {
-            showSignal.Set();
+            // Started at sign-in while already running (an old startup entry too): stay out of sight.
+            if (!minimized) showSignal.Set();
             return 0;
         }
+        if (!demo && dataDir == null) StartupRegistration.RemoveLegacyEntry();
 
         IMonitorBackend backend = demo
             ? new DemoBackend(Has(args, "--synthetic"))
@@ -79,7 +90,7 @@ internal static class Program
 
         var app = new App();
         app.InitializeComponent();
-        return app.RunTray(backend, startMinimized: Has(args, "--minimized"), showSignal);
+        return app.RunTray(backend, startMinimized: minimized, showSignal);
     }
 
     private static bool Has(string[] args, string flag) => args.Contains(flag, StringComparer.OrdinalIgnoreCase);
