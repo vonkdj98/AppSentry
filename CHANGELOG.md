@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.6
+
+- **Connects to the service after a restart**: the service starts delayed, a minute or two after sign-in, and the app
+  started at sign-in gave up on it after under a second, so it ran in local mode (no Guard) until reopened. Started at
+  sign-in, it now waits up to 5 minutes for a service that is set to start.
+
 ## 2.1.5
 
 - **Starts at sign-in again**: the installer now registers a Task Scheduler task that starts the tray app for each

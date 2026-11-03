@@ -86,11 +86,45 @@ internal static class Program
             ? new DemoBackend(Has(args, "--synthetic"))
             : dataDir != null
                 ? new LocalBackend(dataDir)
-                : PipeBackend.TryConnect(TimeSpan.FromMilliseconds(700)) ?? (IMonitorBackend)new LocalBackend(LocalBackend.DefaultDataDir);
+                : ConnectToService(waitForStart: autostart) ?? (IMonitorBackend)new LocalBackend(LocalBackend.DefaultDataDir);
 
         var app = new App();
         app.InitializeComponent();
         return app.RunTray(backend, startMinimized: minimized, showSignal);
+    }
+
+    /// <summary>
+    /// The service starts delayed, a minute or two after sign-in, so the sign-in start used to find no service, fall
+    /// back to local mode (no Guard) and stay there until restarted. Started at sign-in, the app waits for a service
+    /// that is set to start.
+    /// </summary>
+    private static IMonitorBackend? ConnectToService(bool waitForStart)
+    {
+        if (PipeBackend.TryConnect(TimeSpan.FromMilliseconds(700)) is { } backend) return backend;
+        if (!waitForStart || !ServiceWillStart()) return null;
+        TrayLog.Write("Waiting for the AppSentry service to start");
+        var deadline = DateTime.UtcNow + TimeSpan.FromMinutes(5);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (PipeBackend.TryConnect(TimeSpan.FromSeconds(2)) is { } connected) return connected;
+            Thread.Sleep(TimeSpan.FromSeconds(3));
+        }
+        TrayLog.Write("The service didn't start within 5 minutes; monitoring in-process");
+        return null;
+    }
+
+    private static bool ServiceWillStart()
+    {
+        try
+        {
+            using var sc = new ServiceController(AppSentryWindowsService.Name);
+            return sc.Status is ServiceControllerStatus.Running or ServiceControllerStatus.StartPending
+                   || sc.StartType == ServiceStartMode.Automatic;
+        }
+        catch (InvalidOperationException)
+        {
+            return false; // not installed
+        }
     }
 
     private static bool Has(string[] args, string flag) => args.Contains(flag, StringComparer.OrdinalIgnoreCase);
