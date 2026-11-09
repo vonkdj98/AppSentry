@@ -81,7 +81,7 @@ public static class TaskSource
             var changes = new List<string>();
             if (!before.Actions.Equals(task.Actions, StringComparison.OrdinalIgnoreCase))
                 changes.Add($"Actions: \"{before.Actions}\" → \"{task.Actions}\"");
-            if (!before.RunAs.Equals(task.RunAs, StringComparison.OrdinalIgnoreCase) || before.Highest != task.Highest)
+            if (!SameAccount(before.RunAs, task.RunAs) || before.Highest != task.Highest)
                 changes.Add($"Run as: {RunAsLabel(before)} → {RunAsLabel(task)}");
             if (changes.Count > 0)
                 events.Add(Event(task, ChangeType.Modified, nowUtc, string.Join("; ", changes), before));
@@ -223,6 +223,38 @@ public static class TaskSource
             Source = DetectionSource.ScheduledTask,
             Details = details
         };
+    }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> SidCache = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether two task principals are the same account. Windows stores one either way, a SID or a name ("alex",
+    /// "CONTOSO\alex"), and an updater re-saving its task can switch between them (Firefox does); compared as text,
+    /// that looked like the task being moved to another account.
+    /// </summary>
+    internal static bool SameAccount(string a, string b)
+    {
+        if (a.Equals(b, StringComparison.OrdinalIgnoreCase)) return true;
+        if (a.Length == 0 || b.Length == 0) return false;
+        return ToSid(a) is { } sidA && ToSid(b) is { } sidB && sidA.Equals(sidB, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? ToSid(string account)
+    {
+        if (account.StartsWith("S-1-", StringComparison.OrdinalIgnoreCase)) return account;
+        if (SidCache.TryGetValue(account, out var cached)) return cached.Length > 0 ? cached : null;
+        string sid;
+        try
+        {
+            sid = ((System.Security.Principal.SecurityIdentifier)new System.Security.Principal.NTAccount(account)
+                .Translate(typeof(System.Security.Principal.SecurityIdentifier))).Value;
+        }
+        catch (Exception)
+        {
+            sid = ""; // unknown or unresolvable (a deleted account, no domain controller): only an exact match counts
+        }
+        SidCache[account] = sid;
+        return sid.Length > 0 ? sid : null;
     }
 
     private static string RunAsLabel(TaskRecord t) =>

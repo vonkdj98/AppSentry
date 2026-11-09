@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.7
+
+- **Mark reviewed stays in one place**: the button now sits in a fixed bar at the top of the details pane, above the
+  scrolling content, instead of below the title and warning, where it moved whenever either wrapped to another line.
+  Clicking through a run of alerts no longer means finding it again each time.
+- **No false "account changed" on scheduled tasks**: a task saved with an account's SID and later with its name (the
+  Firefox updater does this) was reported as moved to another account. Accounts are now compared by identity.
+
 ## 2.1.6
 
 - **Connects to the service after a restart**: the service starts delayed, a minute or two after sign-in, and the app
