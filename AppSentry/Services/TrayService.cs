@@ -18,7 +18,10 @@ public sealed class TrayService : IDisposable
     private readonly Action _showWindow;
     private readonly Action<long> _showEvent;
     private readonly Action _exit;
-    private readonly TaskbarIcon _icon;
+    private readonly ContextMenu _menu;
+    private TaskbarIcon _icon;
+    private DateTime _lastRebuildUtc = DateTime.MinValue;
+    private bool _failing;
     private BrandIcon.State _state = (BrandIcon.State)(-1);
     private System.Drawing.Icon? _trayIcon;
     private IReadOnlyList<string> _editionLines = [];
@@ -35,19 +38,14 @@ public sealed class TrayService : IDisposable
         _showEvent = showEvent;
         _exit = exit;
 
-        var menu = new ContextMenu();
-        menu.Opened += (_, _) => BuildMenu(menu);
-        BuildMenu(menu);
+        _menu = new ContextMenu();
+        _menu.Opened += (_, _) => BuildMenu(_menu);
+        BuildMenu(_menu);
 
-        _icon = new TaskbarIcon
-        {
-            ToolTipText = "AppSentry",
-            ContextMenu = menu,
-            LeftClickCommand = new RelayCommand(_showWindow),
-            NoLeftClickDelay = true
-        };
+        _state = BrandIcon.State.Normal;
+        _trayIcon = BrandIcon.TrayIcon(_state);
+        _icon = CreateIcon();
         Refresh();
-        _icon.ForceCreate(false); // false: don't put the process into Windows efficiency mode
 
         // An edition's lines (Guard: speed in and out) change all the time; keep them fresh so hovering shows now.
         if (_shell.EditionTrayLines != null)
@@ -105,7 +103,54 @@ public sealed class TrayService : IDisposable
     }
 
     private void UpdateTip() =>
-        _icon.ToolTipText = BuildTip(_shell.StatusText, _editionLines, _shell.NeedsLookCount, _shell.Settings.NotificationsPaused);
+        Apply(() => _icon.ToolTipText = BuildTip(_shell.StatusText, _editionLines, _shell.NeedsLookCount, _shell.Settings.NotificationsPaused));
+
+    private TaskbarIcon CreateIcon()
+    {
+        var icon = new TaskbarIcon
+        {
+            ToolTipText = "AppSentry",
+            Icon = _trayIcon,
+            ContextMenu = _menu,
+            LeftClickCommand = new RelayCommand(_showWindow),
+            NoLeftClickDelay = true
+        };
+        try
+        {
+            icon.ForceCreate(false); // false: don't put the process into Windows efficiency mode
+        }
+        catch (Exception ex)
+        {
+            // The taskbar isn't ready (just after sign-in) or Explorer is restarting: the next update rebuilds it.
+            TrayLog.Write($"Tray icon not created yet: {ex.Message}");
+        }
+        return icon;
+    }
+
+    /// <summary>
+    /// Changes the tray icon, and never lets a failure out. Windows refuses changes to an icon it has lost (Explorer
+    /// restarted, or the icon went up before the taskbar was ready), and the library then throws on every update:
+    /// with Guard's tooltip refreshing every 3 seconds, that stacked up error boxes. A failure is logged once and the
+    /// icon rebuilt, at most every 30 seconds, until Windows takes it again.
+    /// </summary>
+    private void Apply(Action change)
+    {
+        try
+        {
+            change();
+            if (_failing) TrayLog.Write("Tray icon working again");
+            _failing = false;
+        }
+        catch (Exception ex)
+        {
+            if (!_failing) TrayLog.Write($"Tray icon update failed ({ex.Message}); rebuilding it");
+            _failing = true;
+            if (DateTime.UtcNow - _lastRebuildUtc < TimeSpan.FromSeconds(30)) return;
+            _lastRebuildUtc = DateTime.UtcNow;
+            try { _icon.Dispose(); } catch (Exception) { /* already gone from the shell */ }
+            _icon = CreateIcon();
+        }
+    }
 
     /// <summary>Re-evaluates icon and tooltip; call when counts, pause or status change.</summary>
     public void Refresh()
@@ -118,7 +163,7 @@ public sealed class TrayService : IDisposable
             _state = state;
             var previous = _trayIcon;
             _trayIcon = BrandIcon.TrayIcon(state);
-            _icon.Icon = _trayIcon;
+            Apply(() => _icon.Icon = _trayIcon);
             previous?.Dispose();
         }
 

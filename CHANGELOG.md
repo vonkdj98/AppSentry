@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.8
+
+- **No more stacks of "UpdateToolTip failed" boxes**: when Windows lost the tray icon (Explorer restarting, or the icon
+  going up before the taskbar was ready at sign-in), every tooltip refresh threw, and with Guard refreshing every 3
+  seconds the error boxes piled up. Tray updates now never fail out: the problem is logged and the icon rebuilt.
+- An error that repeats now shows one box at a time.
+
 ## 2.1.7
 
 - **Mark reviewed stays in one place**: the button now sits in a fixed bar at the top of the details pane, above the

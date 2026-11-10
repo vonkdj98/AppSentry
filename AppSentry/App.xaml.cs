@@ -19,6 +19,7 @@ public partial class App : Application
     private MainWindow? _window;
     private TrayService? _tray;
     private bool _exiting;
+    private bool _errorShowing;
 
     public ToastService? Toasts { get; private set; }
 
@@ -72,8 +73,12 @@ public partial class App : Application
         {
             TrayLog.Write($"Unhandled UI exception: {e.Exception}");
             EngineLog.Error("Unhandled UI exception", e.Exception);
-            Dialogs.ShowError("AppSentry", $"Something went wrong: {e.Exception.Message}");
             e.Handled = true;
+            // One box at a time: an error that repeats (a timer) used to stack a new box every few seconds.
+            if (_errorShowing) return;
+            _errorShowing = true;
+            try { Dialogs.ShowError("AppSentry", $"Something went wrong: {e.Exception.Message}"); }
+            finally { _errorShowing = false; }
         };
 
         Startup += async (_, _) =>
