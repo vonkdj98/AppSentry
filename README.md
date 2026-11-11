@@ -200,6 +200,12 @@ Once, for the WiX toolset it needs: `dotnet tool install --global wix --version 
 its license page comes from `installer\EULA.txt`; `-CertThumbprint` or `-Pfx` signs the exe before it goes in and the
 MSI afterwards, both timestamped.
 
+AppSentry Guard builds its MSI with this same script and .wxs, but it comes out as a separate package: it is called
+**AppSentry Guard** in Apps and features and has its own `UpgradeCode`. The script works out which package to build
+the same way the build decides what goes into the exe, so there is nothing to pass. Installing Guard replaces
+AppSentry. The free MSI never replaces Guard: it stops with a message if Guard is installed. The comment at the top
+of the .wxs says why: it keeps winget from treating an installed Guard as this package.
+
 ### Continuous integration
 
 | Workflow | When | What |
@@ -214,9 +220,14 @@ same build run straight from disk — no Add/Remove Programs entry, nothing to u
 release to one URL and one hash for winget to check. The manifest lives in
 [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs/tree/master/manifests/v/vonkdj98/AppSentry) under
 `manifests/v/vonkdj98/AppSentry/<version>/`, with `Scope: machine` (the package is `perMachine`), `/qn /norestart` for a
-silent install, and the `UpgradeCode` shared with Guard — that MSI replaces AppSentry instead of sitting beside it.
-`ProductCode` changes with every build because WiX generates it, and the tooling reads it off the MSI, so it is never
-copied by hand. Once the package is published, `winget install vonkdj98.AppSentry` gets it.
+silent install, and the free MSI's `UpgradeCode`. `ProductCode` changes with every build because WiX generates it, and
+the tooling reads it off the MSI, so it is never copied by hand. Once the package is published,
+`winget install vonkdj98.AppSentry` gets it.
+
+winget decides that an installed program is this package when its `UpgradeCode` or `ProductCode` matches, or its name
+and publisher do. So Guard never shares either one with the free package (see [The installer](#the-installer)).
+Otherwise `winget upgrade` would offer the free MSI to everyone who has Guard and replace Guard with it. Guard's
+`UpgradeCode` must never go into this manifest.
 
 `release.yml` opens the winget pull request for every release it makes, in the **Submit the MSI to winget** step. That
 step skips itself until the `WINGET_CREATE_GITHUB_TOKEN` repository secret exists — a personal access token with the

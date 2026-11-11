@@ -6,6 +6,8 @@
     Icon      the .ico for Start and Apps and features
     EulaRtf   the license text shown before installing
     Docs      the folder holding EULA.txt and THIRD-PARTY-NOTICES.txt
+    Edition   Free or Guard: which package this is (the script works it out the way the build does, so it matches
+              the exe)
 
   Installs for every user into Program Files\AppSentry, adds a Start menu shortcut and registers the background
   service by running the exe's own install-service switch (the same code as Settings, Install service), so the
@@ -13,16 +15,54 @@
     msiexec /i AppSentry.msi /qn INSTALLSERVICE=0
   It also registers a sign-in task that starts the tray app for each user. Uninstalling removes the service, the task and the program; the history in C:\ProgramData\AppSentry is kept.
 
-  AppSentry Guard (the add-on edition) builds its installer from this same file with its own EULA, so the
-  UpgradeCode below is shared on purpose: the two MSIs are the same product with different features, and one
-  replaces the other instead of sitting beside it.
+  AppSentry Guard (the paid edition) builds its installer from this same file with its own EULA, but as a separate
+  package: its own UpgradeCode and its own name in Apps and features. winget decides which of its packages an installed
+  program is by UpgradeCode, ProductCode, or name and publisher together. While Guard had the free UpgradeCode and
+  name, winget took an installed Guard for vonkdj98.AppSentry (the free package), so `winget upgrade` would have
+  installed the free MSI over it as soon as a newer free version came out, and that MSI's major upgrade would have
+  removed Guard. So the two editions now work like this:
+    - Guard replaces AppSentry. The Guard MSI also removes any product with the free UpgradeCode, whatever its version.
+      That includes Guard 2.2.0 and earlier, which still used the free UpgradeCode.
+    - AppSentry never replaces Guard. The free MSI stops with a message when Guard is installed, so switching back to
+      the free edition means uninstalling Guard first.
+  Never change either UpgradeCode. The free one is also in the winget manifest (AppsAndFeaturesEntries), and Guard's must
+  never be listed there.
 -->
+<?ifndef Edition ?>
+  <?define Edition = "Free" ?>
+<?endif ?>
+<?define FreeUpgradeCode = "59f56bb3-2d88-4d14-802b-351796ba7884" ?>
+<?define GuardUpgradeCode = "ebf178ab-9eab-4461-b6ad-6b59c20f89cd" ?>
+<?if $(Edition) = "Guard" ?>
+  <?define ProductName = "AppSentry Guard" ?>
+  <?define UpgradeCode = "$(GuardUpgradeCode)" ?>
+<?elseif $(Edition) = "Free" ?>
+  <?define ProductName = "AppSentry" ?>
+  <?define UpgradeCode = "$(FreeUpgradeCode)" ?>
+<?else ?>
+  <?error Edition must be Free or Guard ?>
+<?endif ?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
-  <Package Name="AppSentry" Manufacturer="AppSentry" Version="$(Version)"
-           UpgradeCode="59f56bb3-2d88-4d14-802b-351796ba7884" Scope="perMachine" InstallerVersion="500" Compressed="yes">
-    <SummaryInformation Description="AppSentry: see what gets installed and what uses the network" />
+  <Package Name="$(ProductName)" Manufacturer="AppSentry" Version="$(Version)"
+           UpgradeCode="$(UpgradeCode)" Scope="perMachine" InstallerVersion="500" Compressed="yes">
+    <SummaryInformation Description="$(ProductName): see what gets installed and what uses the network" />
 
-    <MajorUpgrade DowngradeErrorMessage="A newer version of AppSentry is already installed." />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of $(ProductName) is already installed." />
+<?if $(Edition) = "Guard" ?>
+    <!-- Guard takes the free edition's place, whatever version that is. Windows Installer removes it at the same step
+         as an older Guard (RemoveExistingProducts, which MajorUpgrade schedules). -->
+    <Upgrade Id="$(FreeUpgradeCode)">
+      <UpgradeVersion Minimum="0.0.0" IncludeMinimum="yes" Property="APPSENTRYFREEFOUND" />
+    </Upgrade>
+<?else ?>
+    <!-- The free MSI never removes Guard: it only looks for it, and stops if it finds it. "Installed" lets repair and
+         uninstall of AppSentry itself still run. -->
+    <Upgrade Id="$(GuardUpgradeCode)">
+      <UpgradeVersion Minimum="0.0.0" IncludeMinimum="yes" OnlyDetect="yes" Property="APPSENTRYGUARDFOUND" />
+    </Upgrade>
+    <Launch Condition="Installed OR NOT APPSENTRYGUARDFOUND"
+            Message="AppSentry Guard is installed on this PC, and it already includes everything in AppSentry. To use the free edition instead, uninstall AppSentry Guard first (Settings, Apps, Installed apps)." />
+<?endif ?>
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
     <Icon Id="AppSentry.ico" SourceFile="$(Icon)" />
@@ -89,6 +129,8 @@
       files takes about 5 seconds. So, once the service and tray app are stopped, the installed files are renamed
       (*.upgrade-old) just before that check, the new ones are written as if new, and the renamed ones are deleted when
       the install commits or renamed back if it rolls back. InstallValidate itself stays: Windows Installer requires it.
+      "An upgrade" is an older version of this package (WIX_UPGRADE_DETECTED), or the free edition that Guard replaces
+      (APPSENTRYFREEFOUND, never set in the free MSI).
     -->
     <CustomAction Id="MoveAsideOldFiles" Directory="TARGETDIR" Execute="immediate" Return="ignore"
                   ExeCommand="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -Command &quot;cd $env:ProgramFiles\AppSentry; gci AppSentry.exe,EULA.txt,THIRD-PARTY-NOTICES.txt|%{mv $_ ($_.Name+'.upgrade-old') -Force}&quot;" />
@@ -100,9 +142,9 @@
     <InstallExecuteSequence>
       <Custom Action="StopAppSentryService" Before="CloseAppSentryTray" />
       <Custom Action="CloseAppSentryTray" Before="MoveAsideOldFiles" />
-      <Custom Action="MoveAsideOldFiles" Before="InstallValidate" Condition="WIX_UPGRADE_DETECTED" />
-      <Custom Action="RestoreOldFiles" After="InstallInitialize" Condition="WIX_UPGRADE_DETECTED" />
-      <Custom Action="DeleteOldFiles" After="InstallFiles" Condition="WIX_UPGRADE_DETECTED" />
+      <Custom Action="MoveAsideOldFiles" Before="InstallValidate" Condition="WIX_UPGRADE_DETECTED OR APPSENTRYFREEFOUND" />
+      <Custom Action="RestoreOldFiles" After="InstallInitialize" Condition="WIX_UPGRADE_DETECTED OR APPSENTRYFREEFOUND" />
+      <Custom Action="DeleteOldFiles" After="InstallFiles" Condition="WIX_UPGRADE_DETECTED OR APPSENTRYFREEFOUND" />
       <Custom Action="InstallService" After="InstallFiles" Condition="NOT REMOVE AND INSTALLSERVICE=&quot;1&quot;" />
       <Custom Action="RegisterAutostart" After="InstallFiles" Condition="NOT REMOVE" />
       <Custom Action="UnregisterAutostart" Before="RemoveFiles" Condition="REMOVE=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
