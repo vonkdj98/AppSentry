@@ -112,7 +112,7 @@ public class OtherPageTests
     }
 
     [Fact]
-    public void Installed_page_filters_by_scope_and_recency_and_sorts_by_size()
+    public async Task Installed_page_filters_by_scope_and_recency_and_sorts_by_size()
     {
         var backend = new FakeBackend();
         backend.Inventory.AddRange(
@@ -123,7 +123,7 @@ public class OtherPageTests
         ]);
         var shell = FakeBackend.Shell(backend);
         var vm = shell.Installed;
-        vm.LoadAsync().GetAwaiter().GetResult();
+        await vm.LoadAsync();
 
         List<string> Names() => vm.Apps!.Cast<InstalledItemViewModel>().Select(i => i.Title).ToList();
 
@@ -140,7 +140,7 @@ public class OtherPageTests
     }
 
     [Fact]
-    public void Services_page_hides_microsoft_components_by_default()
+    public async Task Services_page_hides_microsoft_components_by_default()
     {
         var backend = new FakeBackend
         {
@@ -157,7 +157,7 @@ public class OtherPageTests
         };
         var shell = FakeBackend.Shell(backend);
         var vm = shell.Persistence;
-        vm.LoadAsync().GetAwaiter().GetResult();
+        await vm.LoadAsync();
 
         List<string> Titles() => vm.Rows!.Cast<PersistenceRowViewModel>().Select(r => r.Title).ToList();
 

@@ -181,9 +181,11 @@ public sealed class ActivityViewModel : ObservableObject, IPage
             var types = new[] { (FilterInstalled, "Installed"), (FilterUpdated, "Updated"), (FilterRemoved, "Removed"), (FilterModified, "Modified"), (FilterFailed, "Failed") }
                 .Where(t => t.Item1).Select(t => t.Item2).ToList();
             if (types.Count > 0) text += $" · only {string.Join(", ", types)}";
-            return _shell.IsLoadingHistory
-                ? $"{text} · loading older changes ({_shell.AllEvents.Count:N0} of {_shell.TotalHistoryCount:N0})"
-                : text;
+            if (_shell.IsLoadingHistory)
+                return $"{text} · loading older changes ({_shell.AllEvents.Count:N0} of {_shell.TotalHistoryCount:N0})";
+            if (_shell.HistoryIsCapped)
+                text += " · the most recent changes only — Export CSV has the full history";
+            return text;
         }
     }
 
