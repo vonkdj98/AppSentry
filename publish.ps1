@@ -15,6 +15,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Relative -OutDir means relative to this script, not to whoever called it.
+if (-not [System.IO.Path]::IsPathRooted($OutDir)) { $OutDir = Join-Path $PSScriptRoot $OutDir }
+
 $project = Join-Path $PSScriptRoot "AppSentry/AppSentry.csproj"
 $workDir = Join-Path $OutDir "publish"
 
@@ -33,7 +36,7 @@ $exe = Join-Path $OutDir "AppSentry.exe"
 Copy-Item (Join-Path $workDir "AppSentry.exe") $exe -Force
 
 $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
-"$hash  AppSentry.exe" | Set-Content -Path (Join-Path $OutDir "SHA256SUMS.txt") -Encoding ascii -NoNewline
+"$hash  AppSentry.exe" | Set-Content -Path (Join-Path $OutDir "SHA256SUMS.txt") -Encoding ascii   # newline-terminated: the release workflow appends the MSI's hash to this file
 
 $sizeMb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
 Write-Host ""

@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  AppSentry installer (WiX v5). Built by installer\build-installer.ps1, which passes:
+    Version   the product version (from Directory.Build.props)
+    Exe       the published single-file AppSentry.exe
+    Icon      the .ico for Start and Apps and features
+    EulaRtf   the license text shown before installing
+    Docs      the folder holding EULA.txt and THIRD-PARTY-NOTICES.txt
+
+  Installs for every user into Program Files\AppSentry, adds a Start menu shortcut and registers the background
+  service by running the exe's own install-service switch (the same code as Settings, Install service), so the
+  service is configured one way however it was installed. For a silent install that leaves the service out:
+    msiexec /i AppSentry.msi /qn INSTALLSERVICE=0
+  It also registers a sign-in task that starts the tray app for each user. Uninstalling removes the service, the task and the program; the history in C:\ProgramData\AppSentry is kept.
+
+  AppSentry Guard (the add-on edition) builds its installer from this same file with its own EULA, so the
+  UpgradeCode below is shared on purpose: the two MSIs are the same product with different features, and one
+  replaces the other instead of sitting beside it.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="AppSentry" Manufacturer="AppSentry" Version="$(Version)"
+           UpgradeCode="59f56bb3-2d88-4d14-802b-351796ba7884" Scope="perMachine" InstallerVersion="500" Compressed="yes">
+    <SummaryInformation Description="AppSentry: see what gets installed and what uses the network" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of AppSentry is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="AppSentry.ico" SourceFile="$(Icon)" />
+    <Property Id="ARPPRODUCTICON" Value="AppSentry.ico" />
+    <Property Id="INSTALLSERVICE" Value="1" Secure="yes" />
+
+    <WixVariable Id="WixUILicenseRtf" Value="$(EulaRtf)" />
+    <ui:WixUI Id="WixUI_Minimal" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="AppSentry" />
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="AppSentry" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+    </Feature>
+
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Component Id="AppExe" Guid="*">
+        <File Id="AppSentryExe" Name="AppSentry.exe" Source="$(Exe)" KeyPath="yes">
+          <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="AppSentry" Advertise="no"
+                    WorkingDirectory="INSTALLFOLDER" Icon="AppSentry.ico" />
+        </File>
+        <!-- Let go of the exe before it's replaced or removed (an upgrade with the service running). -->
+        <ServiceControl Id="StopAppSentry" Name="AppSentry" Stop="both" Wait="yes" />
+      </Component>
+      <Component Id="EulaDoc" Guid="*">
+        <File Id="EulaTxt" Name="EULA.txt" Source="$(Docs)\EULA.txt" KeyPath="yes" />
+      </Component>
+      <Component Id="NoticesDoc" Guid="*">
+        <File Id="NoticesTxt" Name="THIRD-PARTY-NOTICES.txt" Source="$(Docs)\THIRD-PARTY-NOTICES.txt" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- Register and start the service (or reconfigure it, on an upgrade), and take it out on uninstall. -->
+    <CustomAction Id="InstallService" Directory="INSTALLFOLDER" Execute="deferred" Impersonate="no" Return="check"
+                  ExeCommand="&quot;[INSTALLFOLDER]AppSentry.exe&quot; --install-service --quiet" />
+    <CustomAction Id="RemoveService" Directory="INSTALLFOLDER" Execute="deferred" Impersonate="no" Return="ignore"
+                  ExeCommand="&quot;[INSTALLFOLDER]AppSentry.exe&quot; --uninstall-service --quiet" />
+
+    <!-- Start the tray app at every user's sign-in (a Task Scheduler task; see TrayAutostart), and take that out on uninstall. -->
+    <CustomAction Id="RegisterAutostart" Directory="INSTALLFOLDER" Execute="deferred" Impersonate="no" Return="ignore"
+                  ExeCommand="&quot;[INSTALLFOLDER]AppSentry.exe&quot; --register-autostart --quiet" />
+    <CustomAction Id="UnregisterAutostart" Directory="INSTALLFOLDER" Execute="deferred" Impersonate="no" Return="ignore"
+                  ExeCommand="&quot;[INSTALLFOLDER]AppSentry.exe&quot; --unregister-autostart --quiet" />
+
+    <!--
+      Stop the service and close the tray app first, so no file is in use when anything is replaced. These run in
+      the installing process, so they work for silent and elevated installs; a double-click install from a
+      non-elevated window still gets the normal Files in Use box for the service (ServiceControl stops it later) and
+      closes the tray app itself.
+    -->
+    <!-- Each command stays under 255 characters, the most a custom action's command can hold. net stop waits until the service has stopped. -->
+    <CustomAction Id="StopAppSentryService" Directory="TARGETDIR" Execute="immediate" Return="ignore"
+                  ExeCommand="&quot;[WindowsFolder]System32\net.exe&quot; stop AppSentry" />
+    <CustomAction Id="CloseAppSentryTray" Directory="TARGETDIR" Execute="immediate" Return="ignore"
+                  ExeCommand="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -Command &quot;gps AppSentry|?{$_.Path -like '*Program Files\AppSentry*'}|kill -f&quot;" />
+
+    <!--
+      Why the old files are moved aside on an upgrade. InstallValidate scans every running process for files the install
+      will replace. Where Group Policy disables automatic application shutdown it does that with Windows Installer's
+      old built-in method, which took 3 to 5 minutes of CPU on a managed PC (security software slows the per-process
+      module listing), and it only runs when a file already on disk has to be replaced: a fresh install of the same
+      files takes about 5 seconds. So, once the service and tray app are stopped, the installed files are renamed
+      (*.upgrade-old) just before that check, the new ones are written as if new, and the renamed ones are deleted when
+      the install commits or renamed back if it rolls back. InstallValidate itself stays: Windows Installer requires it.
+    -->
+    <CustomAction Id="MoveAsideOldFiles" Directory="TARGETDIR" Execute="immediate" Return="ignore"
+                  ExeCommand="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -Command &quot;cd $env:ProgramFiles\AppSentry; gci AppSentry.exe,EULA.txt,THIRD-PARTY-NOTICES.txt|%{mv $_ ($_.Name+'.upgrade-old') -Force}&quot;" />
+    <CustomAction Id="RestoreOldFiles" Directory="TARGETDIR" Execute="rollback" Impersonate="no" Return="ignore"
+                  ExeCommand="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -Command &quot;cd $env:ProgramFiles\AppSentry; gci *.upgrade-old|%{mv $_ ($_.Name -replace '.upgrade-old$','') -Force}&quot;" />
+    <CustomAction Id="DeleteOldFiles" Directory="TARGETDIR" Execute="commit" Impersonate="no" Return="ignore"
+                  ExeCommand="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -Command &quot;ri $env:ProgramFiles\AppSentry\*.upgrade-old -Force&quot;" />
+
+    <InstallExecuteSequence>
+      <Custom Action="StopAppSentryService" Before="CloseAppSentryTray" />
+      <Custom Action="CloseAppSentryTray" Before="MoveAsideOldFiles" />
+      <Custom Action="MoveAsideOldFiles" Before="InstallValidate" Condition="WIX_UPGRADE_DETECTED" />
+      <Custom Action="RestoreOldFiles" After="InstallInitialize" Condition="WIX_UPGRADE_DETECTED" />
+      <Custom Action="DeleteOldFiles" After="InstallFiles" Condition="WIX_UPGRADE_DETECTED" />
+      <Custom Action="InstallService" After="InstallFiles" Condition="NOT REMOVE AND INSTALLSERVICE=&quot;1&quot;" />
+      <Custom Action="RegisterAutostart" After="InstallFiles" Condition="NOT REMOVE" />
+      <Custom Action="UnregisterAutostart" Before="RemoveFiles" Condition="REMOVE=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+      <Custom Action="RemoveService" Before="RemoveFiles" Condition="REMOVE=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+    </InstallExecuteSequence>
+  </Package>
+</Wix>

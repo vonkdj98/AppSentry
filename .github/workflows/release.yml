@@ -27,6 +27,19 @@ jobs:
       - name: Publish the single-file exe
         run: pwsh -File publish.ps1
 
+      - name: Install the WiX toolset
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          wix extension add --global WixToolset.UI.wixext/5.0.2
+
+      - name: Build the MSI and add its checksum
+        shell: pwsh
+        run: |
+          pwsh -File installer/build-installer.ps1
+          $hash = (Get-FileHash dist/AppSentry-x64.msi -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  AppSentry-x64.msi" | Add-Content dist/SHA256SUMS.txt -Encoding ascii
+
       - name: Take the release notes from the CHANGELOG
         shell: pwsh
         run: |
@@ -56,4 +69,5 @@ jobs:
             --notes-file dist/notes.md \
             --verify-tag \
             dist/AppSentry.exe#AppSentry.exe \
+            dist/AppSentry-x64.msi#AppSentry-x64.msi \
             dist/SHA256SUMS.txt#SHA256SUMS.txt

@@ -8,6 +8,8 @@ An open-source Windows 11 application that monitors software installs, updates, 
 
 Get **AppSentry.exe** from the [latest release](https://github.com/vonkdj98/AppSentry/releases/latest) and run it. It's a single self-contained file: no installer and no .NET runtime needed. To monitor every user and keep watching when nobody is signed in, install the background service from Settings (or run `AppSentry.exe --install-service`).
 
+**AppSentry-x64.msi** is in the same release for anyone who would rather install it: every user on the PC, a Start menu shortcut, the background service and the sign-in task registered on install, and the history left alone if you uninstall. Silent, without the service: `msiexec /i AppSentry-x64.msi /qn INSTALLSERVICE=0`.
+
 The exe isn't code-signed yet, so Windows SmartScreen may warn the first time; choose **More info → Run anyway**.
 
 ## Features
@@ -184,15 +186,26 @@ dotnet publish AppSentry/AppSentry.csproj ^
 ```
 
 Add `-FrameworkDependent` for a smaller exe that needs the .NET 9 Desktop Runtime. CI runs the same script on
-every push and pull request, and pushing a tag named `v<version>` (as in `v2.1.9`) publishes a GitHub release
-with what it builds — the release notes come from that version's section of `CHANGELOG.md`.
+every push and pull request, and pushing a tag named `v<version>` (as in `v2.2.0`) publishes a GitHub release with
+what it builds — the release notes come from that version's section of `CHANGELOG.md`.
+
+### The installer
+
+```powershell
+installer\build-installer.ps1 -Publish     # publishes, then builds dist\AppSentry-x64.msi
+```
+
+Once, for the WiX toolset it needs: `dotnet tool install --global wix --version 5.0.2` and
+`wix extension add --global WixToolset.UI.wixext/5.0.2`. The package is described in `installer\AppSentry.wxs` and
+its license page comes from `installer\EULA.txt`; `-CertThumbprint` or `-Pfx` signs the exe before it goes in and the
+MSI afterwards, both timestamped.
 
 ### Continuous integration
 
 | Workflow | When | What |
 |---|---|---|
-| `ci.yml` | every push to `main`, every pull request | build, both test projects (including the integration tests), publish the exe and upload it as an artifact |
-| `release.yml` | a tag named `v<version>` | publish the exe with `publish.ps1` and create the release with it and its checksum |
+| `ci.yml` | every push to `main`, every pull request | build, both test projects (including the integration tests), then publish the exe and build the MSI, uploading both as artifacts |
+| `release.yml` | a tag named `v<version>` | publish the exe and the MSI and create the release with them and their checksums |
 
 ## Data Storage
 
@@ -229,6 +242,8 @@ AppSentry/                          # WPF tray app (Fluent theme)
   Demo/                             # sample-data backend and the screenshot renderer
 AppSentry.Tests/                    # xUnit: engine, storage, sources, pipe (integration tests touch this PC)
 AppSentry.UiTests/                  # xUnit: view models (filters, paging, details, notification rules) against a fake backend
+installer/                          # AppSentry.wxs (WiX v5) + build-installer.ps1 → AppSentry-x64.msi
+publish.ps1                         # the publish recipe CI uses: dist\AppSentry.exe and its SHA-256
 ```
 
 ## Contributing
