@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.1.9
+
+- **History loads in a window, not all at once**: the window used to page the entire history into memory at
+  start-up and then re-filter all of it on every change, every keystroke and every review click. It keeps the
+  most recent 20,000 changes now, Activity says when it stopped there, and **Export CSV** still writes everything —
+  so a history several years old opens as quickly as a young one.
+- **"Needs a look" is decided once per change**: the flagging rules ran over the whole list again on every
+  refresh (each change's name against the security-product list, among other things). The answer is now
+  remembered per change and worked out again when the history is reloaded.
+- **CI**: every push and pull request builds the solution on a Windows runner and runs all 94 tests, including
+  the integration tests that scan the machine and use the named pipe, then publishes the single-file exe — so a
+  pull request shows whether the release build works, not just whether it compiles.
+- **A release is published from a tag**: pushing a tag named `v<version>` (as in `v2.1.9`) builds AppSentry.exe
+  and creates the GitHub release with its SHA-256 checksum, using that version's CHANGELOG section as the notes.
+- **The release recipe is in the repo**: `publish.ps1` holds the publish flags that used to live only in the
+  README, and CI runs that same script, so the published exe cannot drift from what the docs describe.
+
 ## 2.1.8
 
 - **No more stacks of "UpdateToolTip failed" boxes**: when Windows lost the tray icon (Explorer restarting, or the icon
