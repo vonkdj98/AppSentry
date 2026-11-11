@@ -6,7 +6,7 @@
 
         .\publish.ps1                      # self-contained: no .NET runtime needed on the PC
         .\publish.ps1 -FrameworkDependent   # smaller, but needs the .NET 9 Desktop Runtime
-        .\publish.ps1 -OutDir publish       # somewhere else
+        .\publish.ps1 -OutDir publish       # somewhere else (relative to the current folder)
 #>
 param(
     [switch]$FrameworkDependent,
@@ -15,8 +15,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# Relative -OutDir means relative to this script, not to whoever called it.
-if (-not [System.IO.Path]::IsPathRooted($OutDir)) { $OutDir = Join-Path $PSScriptRoot $OutDir }
+# Made absolute here, so the rest of the script and anything that reads its output agree on where the exe went.
+if (-not [System.IO.Path]::IsPathRooted($OutDir)) { $OutDir = Join-Path $PWD $OutDir }
 
 $project = Join-Path $PSScriptRoot "AppSentry/AppSentry.csproj"
 $workDir = Join-Path $OutDir "publish"

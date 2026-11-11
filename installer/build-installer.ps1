@@ -11,7 +11,8 @@
   What the MSI does — Program Files\AppSentry for every user, a Start menu shortcut, the background service
   (unless INSTALLSERVICE=0) and the sign-in task; uninstalling keeps the history — is in installer\AppSentry.wxs.
 
-  AppSentry Guard builds its installer from the same .wxs with its own EULA and notices:
+  AppSentry Guard builds its installer from the same .wxs with its own EULA and notices — from Guard's root, so that
+  the relative paths below are Guard's own files:
 
       external\AppSentry\installer\build-installer.ps1 -Exe artifacts\publish\AppSentry.exe `
           -LicenseFile installer\EULA.txt -Notices THIRD-PARTY-NOTICES.txt -OutDir artifacts
@@ -44,6 +45,17 @@ if (-not $Exe) { $Exe = Join-Path $OutDir 'AppSentry.exe' }
 if (-not $Icon) { $Icon = Join-Path $root 'AppSentry\Assets\AppSentry.ico' }
 if (-not $LicenseFile) { $LicenseFile = Join-Path $PSScriptRoot 'EULA.txt' }
 if (-not $Notices) { $Notices = Join-Path $root 'THIRD-PARTY-NOTICES.txt' }
+
+# A relative parameter means relative to the current folder — Guard's root when Guard runs this script — while the
+# defaults above, built from $root/$PSScriptRoot, always come from this repo (the icon, the notices, the EULA).
+# Everything is made absolute before anything reads it, so publish.ps1 and wix get the same paths the caller meant.
+function Resolve-FullPath([string]$path) {
+    if ([System.IO.Path]::IsPathRooted($path)) { return [System.IO.Path]::GetFullPath($path) }
+    [System.IO.Path]::GetFullPath((Join-Path $PWD $path))
+}
+foreach ($name in 'OutDir', 'Exe', 'Icon', 'LicenseFile', 'Notices') {
+    Set-Variable -Name $name -Value (Resolve-FullPath (Get-Variable -Name $name -ValueOnly))
+}
 $staging = Join-Path $OutDir 'installer-docs'
 
 if (-not (Get-Command wix -ErrorAction SilentlyContinue)) {
