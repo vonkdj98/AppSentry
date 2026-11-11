@@ -205,7 +205,31 @@ MSI afterwards, both timestamped.
 | Workflow | When | What |
 |---|---|---|
 | `ci.yml` | every push to `main`, every pull request | build, both test projects (including the integration tests), then publish the exe and build the MSI, uploading both as artifacts |
-| `release.yml` | a tag named `v<version>` | publish the exe and the MSI and create the release with them and their checksums |
+| `release.yml` | a tag named `v<version>` | publish the exe and the MSI and create the release with them and their checksums, then submit the MSI to winget |
+
+### winget
+
+The package is **`vonkdj98.AppSentry`** and what winget installs is the **MSI**, not the single-file exe: the exe is the
+same build run straight from disk — no Add/Remove Programs entry, nothing to uninstall — so one installer keeps a
+release to one URL and one hash for winget to check. The manifest lives in
+[microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs/tree/master/manifests/v/vonkdj98/AppSentry) under
+`manifests/v/vonkdj98/AppSentry/<version>/`, with `Scope: machine` (the package is `perMachine`), `/qn /norestart` for a
+silent install, and the `UpgradeCode` shared with Guard — that MSI replaces AppSentry instead of sitting beside it.
+`ProductCode` changes with every build because WiX generates it, and the tooling reads it off the MSI, so it is never
+copied by hand. Once the package is published, `winget install vonkdj98.AppSentry` gets it.
+
+`release.yml` opens the winget pull request for every release it makes, in the **Submit the MSI to winget** step. That
+step skips itself until the `WINGET_CREATE_GITHUB_TOKEN` repository secret exists — a personal access token with the
+`repo` scope, for the account that owns the winget-pkgs fork — and a red X on it means the release is fine and only the
+submission needs a hand. By hand, once (`--submit` opens the pull request; without it the manifests land in `--out`):
+
+```powershell
+winget install -e --id Microsoft.WingetCreate
+wingetcreate update vonkdj98.AppSentry -v 2.3.0 -u https://github.com/vonkdj98/AppSentry/releases/download/v2.3.0/AppSentry-x64.msi --release-notes-url https://github.com/vonkdj98/AppSentry/releases/tag/v2.3.0 --submit
+```
+
+The first submission had no manifest to update yet, so it went in as a "New package" pull request by hand; until that
+one merges, `update` has nothing to look up.
 
 ## Data Storage
 

@@ -16,6 +16,12 @@ jobs:
     name: Publish the release
     runs-on: windows-latest
 
+    env:
+      # wingetcreate reads its GitHub token from here (the documented way to pass it in CI, so it never reaches a
+      # command line). A personal access token with the repo scope, for the account that owns the winget-pkgs fork;
+      # the winget step below skips itself while the secret is missing. See the README's winget section.
+      WINGET_CREATE_GITHUB_TOKEN: ${{ secrets.WINGET_CREATE_GITHUB_TOKEN }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -71,3 +77,22 @@ jobs:
             dist/AppSentry.exe#AppSentry.exe \
             dist/AppSentry-x64.msi#AppSentry-x64.msi \
             dist/SHA256SUMS.txt#SHA256SUMS.txt
+
+      # Every release also goes out on winget: this updates the vonkdj98.AppSentry manifest to this version and opens
+      # the pull request on microsoft/winget-pkgs. wingetcreate downloads the MSI itself, so the hash, the version and
+      # the ProductCode (WiX generates a fresh one every build) all come from the file that was actually shipped —
+      # nothing here has to be kept in step with the installer. A red X on this step means the release is fine and
+      # only the winget submission needs a hand; the command is in the README's winget section.
+      - name: Submit the MSI to winget
+        if: env.WINGET_CREATE_GITHUB_TOKEN != ''
+        shell: pwsh
+        run: |
+          winget install --id Microsoft.WingetCreate -e --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          # winget puts its command aliases in WindowsApps, which this shell has not picked up yet.
+          $env:Path = "$env:LOCALAPPDATA\Microsoft\WindowsApps;$env:Path"
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          $download = "https://github.com/vonkdj98/AppSentry/releases/download/${{ github.ref_name }}"
+          $tag = "https://github.com/vonkdj98/AppSentry/releases/tag/${{ github.ref_name }}"
+          wingetcreate update vonkdj98.AppSentry --version $version --urls "$download/AppSentry-x64.msi" --release-notes-url $tag --release-date (Get-Date -Format yyyy-MM-dd) --no-open --submit
+          # pwsh keeps going after a command fails, so fail the step on the submission's own exit code.
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
