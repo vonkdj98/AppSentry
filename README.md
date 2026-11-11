@@ -1,5 +1,7 @@
 # AppSentry
 
+[![CI](https://github.com/vonkdj98/AppSentry/actions/workflows/ci.yml/badge.svg)](https://github.com/vonkdj98/AppSentry/actions/workflows/ci.yml)
+
 An open-source Windows 11 application that monitors software installs, updates, and removals in real-time — similar to the install-tracking feature in IObit Uninstaller, but free and open source.
 
 ## Download
@@ -55,7 +57,7 @@ The same rules set the Windows event log level (Error / Warning / Information), 
 - Every change written to the **Windows Application log** (source `AppSentry`) for SIEM collection (e.g. Wazuh)
 - **Export CSV** of the full history, including the attention reason for flagged items
 - **History retention** (optional): keep everything (the default), or delete changes older than 1 month to 2 years, once a day
-- Large histories stay fast: the list loads in pages without the bulky before/after registry values, which are fetched only for the change you open
+- Large histories stay fast: the list loads in pages without the bulky before/after registry values, which are fetched only for the change you open, and the window keeps the most recent 20,000 changes in memory (older ones stay in the database, and **Export CSV** writes them all)
 - Single-instance: launching again brings the running window forward
 - Configurable safety-net scan interval (1, 5, 10, 30 minutes, or off)
 
@@ -165,7 +167,13 @@ dotnet run --project AppSentry/AppSentry.csproj -- --data-dir C:\Temp\AppSentryT
 dotnet test
 dotnet test --filter "Category!=Integration"
 
-# Build a single self-contained exe (no .NET runtime required)
+# Publish a single self-contained exe (no .NET runtime required), into dist\
+./publish.ps1
+```
+
+`publish.ps1` runs this and copies the result to `dist\AppSentry.exe` with a `dist\SHA256SUMS.txt` beside it:
+
+```bash
 dotnet publish AppSentry/AppSentry.csproj ^
   -c Release ^
   -r win-x64 ^
@@ -175,10 +183,16 @@ dotnet publish AppSentry/AppSentry.csproj ^
   -p:EnableCompressionInSingleFile=true
 ```
 
-The output exe will be in:
-```
-AppSentry\bin\Release\net9.0-windows10.0.19041.0\win-x64\publish\AppSentry.exe
-```
+Add `-FrameworkDependent` for a smaller exe that needs the .NET 9 Desktop Runtime. CI runs the same script on
+every push and pull request, and pushing a tag named `v<version>` (as in `v2.1.9`) publishes a GitHub release
+with what it builds — the release notes come from that version's section of `CHANGELOG.md`.
+
+### Continuous integration
+
+| Workflow | When | What |
+|---|---|---|
+| `ci.yml` | every push to `main`, every pull request | build, both test projects (including the integration tests), publish the exe and upload it as an artifact |
+| `release.yml` | a tag named `v<version>` | publish the exe with `publish.ps1` and create the release with it and its checksum |
 
 ## Data Storage
 
