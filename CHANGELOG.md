@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **The Guard installer is a separate package from AppSentry's**: it is called AppSentry Guard in Apps and features
+  and has its own upgrade code. Installing Guard still replaces AppSentry, but the AppSentry MSI now stops with a
+  message when Guard is installed instead of removing it. With the shared code and name, winget took an installed
+  Guard for the free `vonkdj98.AppSentry` package, so `winget upgrade` would have installed the free MSI over it as
+  soon as a newer free version came out. `build-installer.ps1` builds the right package from either tree without being
+  told which.
+
 ## 2.2.0
 
 - **An MSI installer, with its source in this repo**: `installer\AppSentry.wxs` and `installer\build-installer.ps1`

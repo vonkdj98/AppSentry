@@ -17,6 +17,11 @@
       external\AppSentry\installer\build-installer.ps1 -Exe artifacts\publish\AppSentry.exe `
           -LicenseFile installer\EULA.txt -Notices THIRD-PARTY-NOTICES.txt -OutDir artifacts
 
+  Which package it builds — AppSentry, or AppSentry Guard with its own name and UpgradeCode (the .wxs says why) — is
+  worked out the way Directory.Build.props decides what goes into the exe: the edition named in the first
+  AppSentry.Edition.props found above this repo, otherwise the free one. So the Guard tree always gets the Guard
+  package and a plain clone the free one, with nothing to pass. The last line of the output names the package.
+
   Signing (do this for anything you give to a buyer): pass the thumbprint of a code-signing certificate that is in
   your certificate store, or a .pfx file (its password in the APPSENTRY_PFX_PASSWORD environment variable):
       installer\build-installer.ps1 -Publish -CertThumbprint <thumbprint>
@@ -35,7 +40,9 @@ param(
     [string]$Pfx,
     [string]$TimestampUrl = 'http://timestamp.digicert.com',
     [switch]$NoTimestamp,       # only for trying the signing step offline with a throwaway certificate
-    [string]$TestVersion        # only for testing upgrades: builds the MSI with this version (x.y.z) over the same exe; never ship it
+    [string]$TestVersion,       # only for testing upgrades: builds the MSI with this version (x.y.z) over the same exe; never ship it
+    [ValidateSet('Free', 'Guard')]
+    [string]$TestEdition        # only for testing switches between editions: builds that package over this tree's exe; never ship it
 )
 
 $ErrorActionPreference = 'Stop'
@@ -57,6 +64,30 @@ foreach ($name in 'OutDir', 'Exe', 'Icon', 'LicenseFile', 'Notices') {
     Set-Variable -Name $name -Value (Resolve-FullPath (Get-Variable -Name $name -ValueOnly))
 }
 $staging = Join-Path $OutDir 'installer-docs'
+
+# The edition, found the way Directory.Build.props finds it (GetPathOfFileAbove from the folder above this repo: the
+# nearest AppSentry.Edition.props wins). A props file that names no edition is an error rather than a free package,
+# because whatever it adds still goes into the exe.
+function Find-Edition {
+    $dir = Split-Path $root -Parent
+    while ($dir) {
+        $props = Join-Path $dir 'AppSentry.Edition.props'
+        if (Test-Path $props -PathType Leaf) {
+            $node = ([xml](Get-Content $props -Raw)).SelectSingleNode("//*[local-name()='AppSentryEdition']")
+            $name = if ($node) { $node.InnerText.Trim() } else { '' }
+            if ($name -notin 'Free', 'Guard') { throw "$props names edition '$name'; the installer knows Free and Guard." }
+            return $name
+        }
+        $dir = Split-Path $dir -Parent
+    }
+    'Free'
+}
+$Edition = Find-Edition
+if ($TestEdition -and $TestEdition -ne $Edition) {
+    Write-Warning "Building the $TestEdition package around this tree's $Edition exe, for testing only: never ship it."
+    $Edition = $TestEdition
+}
+$packageName = if ($Edition -eq 'Guard') { 'AppSentry Guard' } else { 'AppSentry' }
 
 if (-not (Get-Command wix -ErrorAction SilentlyContinue)) {
     throw 'wix not found: dotnet tool install --global wix --version 5.0.2 && wix extension add --global WixToolset.UI.wixext/5.0.2'
@@ -128,7 +159,7 @@ $eulaRtf = Join-Path $staging 'EULA.rtf'
 
 $msi = Join-Path $OutDir 'AppSentry-x64.msi'
 wix build (Join-Path $PSScriptRoot 'AppSentry.wxs') -arch x64 -ext WixToolset.UI.wixext `
-    -d "Version=$version" -d "Exe=$Exe" -d "Icon=$Icon" -d "EulaRtf=$eulaRtf" -d "Docs=$staging" -o $msi
+    -d "Version=$version" -d "Exe=$Exe" -d "Icon=$Icon" -d "EulaRtf=$eulaRtf" -d "Docs=$staging" -d "Edition=$Edition" -o $msi
 if ($LASTEXITCODE -ne 0) { throw 'wix build failed' }
 
 # ICE43 and ICE57 assume a per-user shortcut; this package is per-machine (ALLUSERS=1), so the Start menu shortcut is
@@ -139,5 +170,5 @@ if ($LASTEXITCODE -ne 0) { throw 'the MSI failed validation' }
 Sign-File $msi
 
 $size = [math]::Round((Get-Item $msi).Length / 1MB, 1)
-if ($signing) { Write-Host "Built and signed $msi ($size MB, version $version)." }
-else { Write-Host "Built $msi ($size MB, version $version), UNSIGNED: don't give it to a buyer. Re-run with -CertThumbprint <thumbprint> or -Pfx <file>." }
+if ($signing) { Write-Host "Built and signed $msi ($packageName $version, $size MB)." }
+else { Write-Host "Built $msi ($packageName $version, $size MB), UNSIGNED: don't give it to a buyer. Re-run with -CertThumbprint <thumbprint> or -Pfx <file>." }
