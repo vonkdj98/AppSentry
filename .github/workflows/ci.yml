@@ -40,9 +40,25 @@ jobs:
       - name: Publish the single-file exe
         run: pwsh -File publish.ps1
 
+      - name: Install the WiX toolset
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          wix extension add --global WixToolset.UI.wixext/5.0.2
+
+      - name: Build the MSI
+        run: pwsh -File installer/build-installer.ps1
+
       - name: Upload the exe
         uses: actions/upload-artifact@v4
         with:
           name: AppSentry-win-x64
           path: dist/AppSentry.exe
+          if-no-files-found: error
+
+      - name: Upload the MSI
+        uses: actions/upload-artifact@v4
+        with:
+          name: AppSentry-x64-msi
+          path: dist/AppSentry-x64.msi
           if-no-files-found: error
