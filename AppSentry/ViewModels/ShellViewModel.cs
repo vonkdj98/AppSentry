@@ -38,6 +38,7 @@ public sealed record SourceHealthRow(string Name, string State, Tone Tone);
 public sealed partial class ShellViewModel : ObservableObject
 {
     private readonly HashSet<long> _knownIds = [];
+    private readonly Dictionary<long, bool> _flagged = [];
     private NavItem _selectedNav;
     private EngineStatus _status;
     private int _needsLookCount;
@@ -188,7 +189,19 @@ public sealed partial class ShellViewModel : ObservableObject
         private set => Set(ref _needsLookCount, value);
     }
 
-    public bool IsFlagged(ChangeEvent ev) => AttentionClassifier.Classify(ev).Level >= AttentionLevel.Warning;
+    /// <summary>
+    /// Whether a change needs a look. The rules are pure and an event never changes, so the answer is
+    /// decided once per event and remembered: the list is re-walked on every scan, every keystroke in
+    /// the search box and every "mark reviewed" click, and the rules scan the app name against the
+    /// security-product list each time. Cleared whenever the history is (re)loaded.
+    /// </summary>
+    public bool IsFlagged(ChangeEvent ev)
+    {
+        if (ev.Id == 0) return AttentionClassifier.Classify(ev).Level >= AttentionLevel.Warning; // not saved yet: no id to key on
+        if (!_flagged.TryGetValue(ev.Id, out var flagged))
+            _flagged[ev.Id] = flagged = AttentionClassifier.Classify(ev).Level >= AttentionLevel.Warning;
+        return flagged;
+    }
 
     public bool IsReviewed(ChangeEvent ev) => Settings.ReviewedEventIds.Contains(ev.Id);
 
@@ -225,7 +238,17 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private const int FirstPageSize = 1000;
     private const int PageSize = 5000;
+
+    /// <summary>
+    /// How much history the window keeps in memory (roughly — it stops after the page that reaches it).
+    /// The lists, filters, summary cards and exclusion match counts work over this window; anything older
+    /// stays in the database and is still in the CSV export. Without a cap, a multi-year history is paged
+    /// in whole at start-up and then re-filtered on every change, every keystroke and every page turn.
+    /// </summary>
+    public const int MaxLoadedEvents = 20_000;
+
     private bool _isLoadingHistory;
+    private bool _historyIsCapped;
     private int _totalHistoryCount;
 
     /// <summary>True while older pages of history are still arriving.</summary>
@@ -240,6 +263,13 @@ public sealed partial class ShellViewModel : ObservableObject
     {
         get => _totalHistoryCount;
         private set => Set(ref _totalHistoryCount, value);
+    }
+
+    /// <summary>True when the history is longer than the window and older changes were not loaded.</summary>
+    public bool HistoryIsCapped
+    {
+        get => _historyIsCapped;
+        private set => Set(ref _historyIsCapped, value);
     }
 
     /// <summary>
@@ -258,15 +288,17 @@ public sealed partial class ShellViewModel : ObservableObject
             AllEvents = AllEvents.Where(e => !ids.Contains(e.Id)).Concat(page.Events).ToList();
             _knownIds.Clear();
             _knownIds.UnionWith(AllEvents.Select(e => e.Id));
+            _flagged.Clear(); // ids start over if the database had to be started fresh
             Activity.Refresh();
             RecountAttention();
 
-            while (page.HasMore && page.Events.Count > 0)
+            while (page.HasMore && page.Events.Count > 0 && AllEvents.Count < MaxLoadedEvents)
             {
                 page = await Backend.GetHistoryPageAsync(new HistoryQuery { BeforeId = page.Events[^1].Id, Limit = PageSize });
                 AllEvents.AddRange(page.Events.Where(e => _knownIds.Add(e.Id)));
                 Activity.OnHistoryProgress();
             }
+            HistoryIsCapped = page.HasMore && AllEvents.Count >= MaxLoadedEvents;
 
             // Only once everything is here: forget "reviewed" marks for events that no longer exist.
             if (Settings.ReviewedEventIds.RemoveWhere(id => !_knownIds.Contains(id)) > 0) SaveSettings();
@@ -295,6 +327,8 @@ public sealed partial class ShellViewModel : ObservableObject
     {
         AllEvents = [];
         _knownIds.Clear();
+        _flagged.Clear();
+        HistoryIsCapped = false;
         Settings.ReviewedEventIds.Clear();
         SaveSettings();
         Activity.Refresh();

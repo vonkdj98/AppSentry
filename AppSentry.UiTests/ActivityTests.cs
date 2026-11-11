@@ -140,6 +140,33 @@ public class ActivityTests
     }
 
     [Fact]
+    public void A_history_longer_than_the_window_loads_the_recent_part_and_says_so()
+    {
+        var backend = new FakeBackend();
+        const int total = ShellViewModel.MaxLoadedEvents + 1_500;
+        for (var i = 0; i < total; i++)
+            backend.Add(ChangeType.Updated, $"App {i}", TimeSpan.FromMinutes(10));
+
+        var shell = FakeBackend.Shell(backend);
+
+        Assert.True(shell.HistoryIsCapped);
+        Assert.InRange(shell.AllEvents.Count, ShellViewModel.MaxLoadedEvents, ShellViewModel.MaxLoadedEvents + 5_000);
+        Assert.Equal(total, shell.TotalHistoryCount);                 // the engine still holds all of it
+        Assert.Contains("Export CSV", shell.Activity.ResultText);     // and the window admits it
+    }
+
+    [Fact]
+    public async Task Reloading_the_history_recounts_needs_a_look_from_scratch()
+    {
+        var (_, shell) = Setup();
+        Assert.Equal(2, shell.NeedsLookCount);
+
+        await shell.ReloadHistoryAsync();
+
+        Assert.Equal(2, shell.NeedsLookCount);
+    }
+
+    [Fact]
     public void Empty_history_explains_the_baseline()
     {
         var shell = FakeBackend.Shell(new FakeBackend());
