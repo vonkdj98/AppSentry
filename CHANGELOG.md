@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.2.0
+
+- **An MSI installer, with its source in this repo**: `installer\AppSentry.wxs` and `installer\build-installer.ps1`
+  build **AppSentry-x64.msi** — Program Files for every user, a Start menu shortcut, and the background service and
+  sign-in task registered through the exe's own switches, so they are configured one way however AppSentry was
+  installed. Uninstalling keeps the history. Silent install without the service:
+  `msiexec /i AppSentry-x64.msi /qn INSTALLSERVICE=0`. Releases carry the MSI beside the single-file exe, and the exe
+  stays for anyone who just wants to run one file.
+- **The license page this installer shows is the MIT license** (`installer\EULA.txt`, plus
+  `THIRD-PARTY-NOTICES.txt` installed beside the exe). The Guard add-on builds its installer from this same .wxs with
+  its own EULA, and the two share an upgrade code on purpose: they are one product with different features, so one
+  replaces the other instead of sitting beside it.
+
 ## 2.1.9
 
 - **History loads in a window, not all at once**: the window used to page the entire history into memory at
