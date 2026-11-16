@@ -43,7 +43,6 @@ public sealed class TrayService : IDisposable
         BuildMenu(_menu);
 
         _state = BrandIcon.State.Normal;
-        _trayIcon = BrandIcon.TrayIcon(_state);
         _icon = CreateIcon();
         Refresh();
 
@@ -105,18 +104,23 @@ public sealed class TrayService : IDisposable
     private void UpdateTip() =>
         Apply(() => _icon.ToolTipText = BuildTip(_shell.StatusText, _editionLines, _shell.NeedsLookCount, _shell.Settings.NotificationsPaused));
 
+    /// <summary>
+    /// A new tray icon with its own image. Disposing a TaskbarIcon disposes the image it shows, so an image is never
+    /// shared between two of them: reusing the old one after a rebuild failed every time ("disposed object 'Icon'").
+    /// </summary>
     private TaskbarIcon CreateIcon()
     {
+        _trayIcon = BrandIcon.TrayIcon(_state);
         var icon = new TaskbarIcon
         {
             ToolTipText = "AppSentry",
-            Icon = _trayIcon,
             ContextMenu = _menu,
             LeftClickCommand = new RelayCommand(_showWindow),
             NoLeftClickDelay = true
         };
         try
         {
+            icon.Icon = _trayIcon;
             icon.ForceCreate(false); // false: don't put the process into Windows efficiency mode
         }
         catch (Exception ex)
@@ -133,22 +137,36 @@ public sealed class TrayService : IDisposable
     /// with Guard's tooltip refreshing every 3 seconds, that stacked up error boxes. A failure is logged once and the
     /// icon rebuilt, at most every 30 seconds, until Windows takes it again.
     /// </summary>
-    private void Apply(Action change)
+    private bool Apply(Action change)
     {
         try
         {
             change();
             if (_failing) TrayLog.Write("Tray icon working again");
             _failing = false;
+            return true;
         }
         catch (Exception ex)
         {
             if (!_failing) TrayLog.Write($"Tray icon update failed ({ex.Message}); rebuilding it");
             _failing = true;
-            if (DateTime.UtcNow - _lastRebuildUtc < TimeSpan.FromSeconds(30)) return;
-            _lastRebuildUtc = DateTime.UtcNow;
-            try { _icon.Dispose(); } catch (Exception) { /* already gone from the shell */ }
+            if (DateTime.UtcNow - _lastRebuildUtc >= TimeSpan.FromSeconds(30)) Rebuild();
+            return false;
+        }
+    }
+
+    private void Rebuild()
+    {
+        _lastRebuildUtc = DateTime.UtcNow;
+        try { _icon.Dispose(); } catch (Exception) { /* already gone from the shell */ }
+        try { _trayIcon?.Dispose(); } catch (Exception) { /* the TaskbarIcon disposed it already */ }
+        try
+        {
             _icon = CreateIcon();
+        }
+        catch (Exception ex)
+        {
+            TrayLog.Write($"Tray icon rebuild failed: {ex.Message}");
         }
     }
 
@@ -162,9 +180,10 @@ public sealed class TrayService : IDisposable
         {
             _state = state;
             var previous = _trayIcon;
-            _trayIcon = BrandIcon.TrayIcon(state);
-            Apply(() => _icon.Icon = _trayIcon);
-            previous?.Dispose();
+            var next = BrandIcon.TrayIcon(state);
+            _trayIcon = next;
+            // On failure the icon may still hold the previous image (or Apply rebuilt it with a fresh one): leave it be.
+            if (Apply(() => _icon.Icon = next)) previous?.Dispose();
         }
 
         UpdateTip();

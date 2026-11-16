@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.1
+
+- **No more "Cannot access a disposed object. Object name: 'Icon'" every 30 seconds**: 2.1.8's tray icon rebuild
+  handed the new icon the image the old one had just disposed along with itself, so every rebuild failed and showed
+  the error again. Each tray icon now gets its own image, and a failed rebuild is logged instead of shown.
+
 ## 2.2.0
 
 - **An MSI installer, with its source in this repo**: `installer\AppSentry.wxs` and `installer\build-installer.ps1`
